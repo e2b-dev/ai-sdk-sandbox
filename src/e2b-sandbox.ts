@@ -261,8 +261,8 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
   private async snapshotExists(name: string): Promise<boolean> {
     const conn = this.connectionOptions();
     const paginator = Sandbox.listSnapshots({ ...conn, limit: 100 });
-    // No server-side name filter, so page client-side. Past the cap we treat it
-    // as a miss and rebuild — bounded cost, not a correctness bug.
+    // Page through snapshots and match by name. Past the cap we treat it as a
+    // miss and rebuild (bounded cost).
     for (
       let page = 0;
       paginator.hasNext && page < SNAPSHOT_LOOKUP_MAX_PAGES;

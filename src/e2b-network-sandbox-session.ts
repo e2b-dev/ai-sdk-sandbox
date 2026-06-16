@@ -40,9 +40,8 @@ export class E2BNetworkSandboxSession
   }) {
     super(input.sandbox);
     this.id = input.sandbox.sandboxId;
-    // E2B has no synchronous cwd accessor (unlike Vercel's
-    // `sandbox.currentSession().cwd`), so the provider resolves it once via
-    // `pwd` and passes it in for this spec-required property.
+    // The provider resolves the live sandbox's working directory once (via
+    // `pwd`) and passes it in for this spec-required property.
     this.defaultWorkingDirectory = input.workingDirectory;
     this.exposedPorts = [...(input.ports ?? [])];
     this.ownsLifecycle = input.ownsLifecycle;
