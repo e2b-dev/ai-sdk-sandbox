@@ -1,0 +1,232 @@
+import type { Sandbox } from 'e2b';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createE2BSandbox } from './e2b-sandbox';
+
+const { createMock, connectMock, listMock } = vi.hoisted(() => ({
+  createMock: vi.fn(),
+  connectMock: vi.fn(),
+  listMock: vi.fn(),
+}));
+
+vi.mock('e2b', async importActual => {
+  const actual = await importActual<typeof import('e2b')>();
+  return {
+    ...actual,
+    Sandbox: { create: createMock, connect: connectMock, list: listMock },
+  };
+});
+
+function makeMockSandbox(overrides: Record<string, unknown> = {}) {
+  const run = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
+  const getHost = vi.fn((port: number) => `${port}-sbx.e2b.app`);
+  const updateNetwork = vi.fn(async () => {});
+  const pause = vi.fn(async () => true);
+  const kill = vi.fn(async () => {});
+  const sandbox = {
+    sandboxId: 'sbx_harness',
+    commands: { run },
+    files: { read: vi.fn(), write: vi.fn() },
+    getHost,
+    updateNetwork,
+    pause,
+    kill,
+    ...overrides,
+  } as unknown as Sandbox;
+  return { sandbox, spies: { run, getHost, updateNetwork, pause, kill } };
+}
+
+beforeEach(() => {
+  createMock.mockReset();
+  connectMock.mockReset();
+  listMock.mockReset();
+});
+
+describe('createE2BSandbox (wrap existing)', () => {
+  it('advertises bridgePorts on the session', async () => {
+    const { sandbox } = makeMockSandbox();
+    const session = await createE2BSandbox({ sandbox, bridgePorts: [3000, 4000] }).createSession();
+    expect(session.ports).toEqual([3000, 4000]);
+  });
+
+  it('restricted() returns a tool-safe session over the same sandbox', async () => {
+    const { sandbox, spies } = makeMockSandbox();
+    spies.run.mockResolvedValueOnce({ exitCode: 0, stdout: '/home/user\n', stderr: '' }); // pwd
+    spies.run.mockResolvedValueOnce({ exitCode: 0, stdout: 'ok\n', stderr: '' }); // echo
+    const session = await createE2BSandbox({ sandbox }).createSession();
+    const result = await session.restricted().run({ command: 'echo ok' });
+    expect(result.stdout).toBe('ok\n');
+  });
+
+  it('stop and destroy are no-ops (caller owns lifecycle)', async () => {
+    const { sandbox, spies } = makeMockSandbox();
+    const session = await createE2BSandbox({ sandbox }).createSession();
+    await session.stop();
+    await session.destroy?.();
+    expect(spies.pause).not.toHaveBeenCalled();
+    expect(spies.kill).not.toHaveBeenCalled();
+  });
+
+  describe('getPortUrl', () => {
+    it('builds an https URL from getHost', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      const url = await session.getPortUrl({ port: 4000 });
+      expect(spies.getHost).toHaveBeenCalledWith(4000);
+      expect(url).toBe('https://4000-sbx.e2b.app');
+    });
+
+    it('upgrades ws to wss (E2B terminates TLS)', async () => {
+      const { sandbox } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      expect(await session.getPortUrl({ port: 4000, protocol: 'ws' })).toBe('wss://4000-sbx.e2b.app');
+    });
+  });
+
+  describe('setNetworkPolicy', () => {
+    it('maps allow-all / deny-all to allowInternetAccess', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.setNetworkPolicy!({ mode: 'allow-all' });
+      expect(spies.updateNetwork).toHaveBeenCalledWith({ allowInternetAccess: true });
+      await session.setNetworkPolicy!({ mode: 'deny-all' });
+      expect(spies.updateNetwork).toHaveBeenCalledWith({ allowInternetAccess: false });
+    });
+
+    it('maps custom hosts + denied CIDRs to allowOut/denyOut, adding ALL_TRAFFIC to deny', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.setNetworkPolicy!({
+        mode: 'custom',
+        allowedHosts: ['api.example.com'],
+        deniedCIDRs: ['169.254.169.254/32'],
+      });
+      // allow-list semantics: E2B needs ALL_TRAFFIC in denyOut so everything
+      // outside the allow-list is blocked.
+      expect(spies.updateNetwork).toHaveBeenCalledWith({
+        allowOut: ['api.example.com'],
+        denyOut: ['169.254.169.254/32', '0.0.0.0/0'],
+      });
+    });
+
+    it('deny-only custom policy does not force ALL_TRAFFIC', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.setNetworkPolicy!({
+        mode: 'custom',
+        allowedCIDRs: undefined as never,
+        deniedCIDRs: ['10.0.0.0/8'],
+      } as never);
+      expect(spies.updateNetwork).toHaveBeenCalledWith({ denyOut: ['10.0.0.0/8'] });
+    });
+
+    it('throws on an empty custom policy', async () => {
+      const { sandbox } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      // An empty custom policy is invalid (the type forbids it); assert the runtime guard.
+      await expect(
+        session.setNetworkPolicy!({ mode: 'custom' } as never),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('setPorts', () => {
+    it('replaces the advertised port list', async () => {
+      const { sandbox } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox, bridgePorts: [4000] }).createSession();
+      await session.setPorts!([5000, 6000]);
+      expect(session.ports).toEqual([5000, 6000]);
+    });
+  });
+
+  describe('bridgePorts', () => {
+    it('is exposed on the provider when set', () => {
+      const { sandbox } = makeMockSandbox();
+      expect(createE2BSandbox({ sandbox, bridgePorts: [5001, 5002] }).bridgePorts).toEqual([5001, 5002]);
+    });
+    it('is undefined when not set', () => {
+      const { sandbox } = makeMockSandbox();
+      expect(createE2BSandbox({ sandbox }).bridgePorts).toBeUndefined();
+    });
+  });
+});
+
+describe('createE2BSandbox (create from scratch)', () => {
+  it('applies a 30 minute default timeout', async () => {
+    createMock.mockResolvedValueOnce(makeMockSandbox().sandbox);
+    await createE2BSandbox({}).createSession();
+    expect(createMock.mock.calls[0][0]).toMatchObject({ timeoutMs: 30 * 60 * 1_000 });
+  });
+
+  it('forwards the abortSignal into Sandbox.create', async () => {
+    createMock.mockResolvedValueOnce(makeMockSandbox().sandbox);
+    const ac = new AbortController();
+    await createE2BSandbox({}).createSession({ abortSignal: ac.signal });
+    expect(createMock.mock.calls[0][0]).toMatchObject({ signal: ac.signal });
+  });
+
+  it('kills the sandbox when a setupCommand fails (no orphaned VM)', async () => {
+    const { sandbox, spies } = makeMockSandbox();
+    spies.run
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '/home/user\n', stderr: '' }) // pwd
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'nope' }); // setup cmd
+    createMock.mockResolvedValueOnce(sandbox);
+    await expect(
+      createE2BSandbox({ setupCommands: ['do-thing'] }).createSession(),
+    ).rejects.toThrow(/setupCommand failed/);
+    expect(spies.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('respects an explicit timeout and tags the sessionId in metadata', async () => {
+    createMock.mockResolvedValueOnce(makeMockSandbox().sandbox);
+    await createE2BSandbox({ timeoutMs: 60_000 }).createSession({ sessionId: 's1' });
+    expect(createMock.mock.calls[0][0]).toMatchObject({
+      timeoutMs: 60_000,
+      metadata: { aiSdkSessionId: 's1' },
+    });
+  });
+
+  it('runs setupCommands before returning, failing loudly on non-zero exit', async () => {
+    const { sandbox, spies } = makeMockSandbox();
+    spies.run
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '/home/user\n', stderr: '' }) // pwd
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'nope' }); // setup cmd
+    createMock.mockResolvedValueOnce(sandbox);
+    await expect(
+      createE2BSandbox({ setupCommands: ['do-thing'] }).createSession(),
+    ).rejects.toThrow(/setupCommand failed/);
+  });
+
+  it('stop pauses and destroy kills an owned sandbox', async () => {
+    const { sandbox, spies } = makeMockSandbox();
+    createMock.mockResolvedValueOnce(sandbox);
+    const session = await createE2BSandbox({}).createSession();
+    await session.stop();
+    expect(spies.pause).toHaveBeenCalledTimes(1);
+
+    const fresh = makeMockSandbox();
+    createMock.mockResolvedValueOnce(fresh.sandbox);
+    const session2 = await createE2BSandbox({}).createSession();
+    await session2.destroy?.();
+    expect(fresh.spies.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('resumeSession looks the sandbox up by metadata and connects', async () => {
+    const { sandbox } = makeMockSandbox();
+    listMock.mockReturnValueOnce({ nextItems: async () => [{ sandboxId: 'sbx_found' }] });
+    connectMock.mockResolvedValueOnce(sandbox);
+
+    await createE2BSandbox({}).resumeSession!({ sessionId: 's1' });
+
+    expect(listMock).toHaveBeenCalledWith(
+      expect.objectContaining({ query: expect.objectContaining({ metadata: { aiSdkSessionId: 's1' } }) }),
+    );
+    expect(connectMock.mock.calls[0][0]).toBe('sbx_found');
+  });
+
+  it('resumeSession throws when no sandbox matches', async () => {
+    listMock.mockReturnValueOnce({ nextItems: async () => [] });
+    await expect(
+      createE2BSandbox({}).resumeSession!({ sessionId: 'missing' }),
+    ).rejects.toThrow(/No resumable E2B sandbox/);
+  });
+});

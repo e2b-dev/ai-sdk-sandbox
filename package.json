@@ -1,0 +1,58 @@
+{
+  "name": "@e2b/ai-sdk-sandbox",
+  "version": "0.1.0",
+  "description": "E2B sandbox provider for the Vercel AI SDK (v7 harness sandbox spec)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "type-check": "tsc --noEmit",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "example:basic": "tsx --env-file-if-exists=.env examples/basic.ts",
+    "example:harness": "tsx --env-file-if-exists=.env examples/harness.ts",
+    "example:resume": "tsx --env-file-if-exists=.env examples/resume.ts"
+  },
+  "keywords": [
+    "ai-sdk",
+    "e2b",
+    "sandbox",
+    "code-execution",
+    "harness"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@ai-sdk/harness": "canary",
+    "@ai-sdk/provider-utils": "canary",
+    "e2b": "^2.29.1"
+  },
+  "devDependencies": {
+    "@ai-sdk/harness-claude-code": "canary",
+    "@types/node": "^25.9.3",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
