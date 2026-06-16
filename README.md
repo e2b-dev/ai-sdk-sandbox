@@ -99,6 +99,7 @@ A few E2B-specific behaviors worth knowing:
 - `stop()` **pauses** the sandbox, so you can pick it back up later with `resumeSession`. `destroy()` kills it for good.
 - Resume works off a session-id tag in the sandbox metadata (E2B assigns the ids, so there's no name to look up), so pass a `sessionId` to `createSession` if you plan to resume.
 - `run` and `spawn` switch off E2B's 60-second per-command timeout, so long builds and background servers don't get cut off. The overall sandbox `timeoutMs` still applies.
+- When the harness passes `identity` + `onFirstCreate` (e.g. the claude-code/codex bootstrap), the setup runs **once**: it's captured as a snapshot and later sessions fork from it instead of re-running it. Reuse survives cold starts via a `listSnapshots` lookup (E2B has no server-side `getOrCreate`, so it's a client-side match — two cold processes can race and build twice, harmlessly). For setup you control ahead of time, a prebuilt template is lighter.
 
 ## Examples
 

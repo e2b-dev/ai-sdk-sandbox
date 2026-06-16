@@ -1,18 +1,26 @@
 import type { Sandbox } from 'e2b';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createE2BSandbox } from './e2b-sandbox';
+import { createE2BSandbox, snapshotName } from './e2b-sandbox';
 
-const { createMock, connectMock, listMock } = vi.hoisted(() => ({
-  createMock: vi.fn(),
-  connectMock: vi.fn(),
-  listMock: vi.fn(),
-}));
+const { createMock, connectMock, listMock, listSnapshotsMock } = vi.hoisted(
+  () => ({
+    createMock: vi.fn(),
+    connectMock: vi.fn(),
+    listMock: vi.fn(),
+    listSnapshotsMock: vi.fn(),
+  }),
+);
 
 vi.mock('e2b', async importActual => {
   const actual = await importActual<typeof import('e2b')>();
   return {
     ...actual,
-    Sandbox: { create: createMock, connect: connectMock, list: listMock },
+    Sandbox: {
+      create: createMock,
+      connect: connectMock,
+      list: listMock,
+      listSnapshots: listSnapshotsMock,
+    },
   };
 });
 
@@ -22,6 +30,10 @@ function makeMockSandbox(overrides: Record<string, unknown> = {}) {
   const updateNetwork = vi.fn(async () => {});
   const pause = vi.fn(async () => true);
   const kill = vi.fn(async () => {});
+  const createSnapshot = vi.fn(async ({ name }: { name: string }) => ({
+    snapshotId: `team/${name}:default`,
+    names: [`team/${name}`],
+  }));
   const sandbox = {
     sandboxId: 'sbx_harness',
     commands: { run },
@@ -30,15 +42,35 @@ function makeMockSandbox(overrides: Record<string, unknown> = {}) {
     updateNetwork,
     pause,
     kill,
+    createSnapshot,
     ...overrides,
   } as unknown as Sandbox;
-  return { sandbox, spies: { run, getHost, updateNetwork, pause, kill } };
+  return { sandbox, spies: { run, getHost, updateNetwork, pause, kill, createSnapshot } };
+}
+
+/** A one-page listSnapshots paginator over the given SnapshotInfo-ish items. */
+function snapshotPage(items: Array<{ snapshotId: string; names: string[] }>) {
+  let served = false;
+  return {
+    get hasNext() {
+      return !served;
+    },
+    nextItems: vi.fn(async () => {
+      served = true;
+      return items;
+    }),
+  };
 }
 
 beforeEach(() => {
   createMock.mockReset();
   connectMock.mockReset();
   listMock.mockReset();
+  listSnapshotsMock.mockReset();
+  // The snapshot cache lives on globalThis; clear it between tests.
+  (
+    globalThis as { [k: symbol]: Map<string, unknown> | undefined }
+  )[Symbol.for('ai-sdk.harness.e2b-snapshot-names')]?.clear();
 });
 
 describe('createE2BSandbox (wrap existing)', () => {
@@ -228,5 +260,93 @@ describe('createE2BSandbox (create from scratch)', () => {
     await expect(
       createE2BSandbox({}).resumeSession!({ sessionId: 'missing' }),
     ).rejects.toThrow(/No resumable E2B sandbox/);
+  });
+});
+
+describe('createE2BSandbox (per-identity snapshot reuse)', () => {
+  const onFirstCreate = () => vi.fn(async () => {});
+
+  it('builds the snapshot once on a miss, then forks the session from it', async () => {
+    const template = makeMockSandbox({ sandboxId: 'sbx_template' });
+    const fork = makeMockSandbox({ sandboxId: 'sbx_fork' });
+    listSnapshotsMock.mockReturnValueOnce(snapshotPage([])); // none exist yet
+    createMock
+      .mockResolvedValueOnce(template.sandbox) // build: template sandbox
+      .mockResolvedValueOnce(fork.sandbox); // fork: session sandbox
+    const hook = onFirstCreate();
+
+    const session = await createE2BSandbox({
+      setupCommands: ['echo setup'],
+    }).createSession({ sessionId: 's1', identity: 'recipe-A', onFirstCreate: hook });
+
+    const name = snapshotName('recipe-A');
+    // ran setup + hook on the template sandbox, snapshotted it, killed it
+    expect(template.spies.run).toHaveBeenCalledWith(
+      'echo setup',
+      expect.anything(),
+    );
+    expect(hook).toHaveBeenCalledTimes(1);
+    expect(template.spies.createSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ name }),
+    );
+    expect(template.spies.kill).toHaveBeenCalledTimes(1);
+    // forked the session from the snapshot name (template arg), no hook re-run
+    expect(createMock.mock.calls[1][0]).toBe(name);
+    expect(createMock.mock.calls[1][1]).toMatchObject({
+      metadata: { aiSdkSessionId: 's1' },
+    });
+    expect(createMock.mock.calls[1][1]).not.toHaveProperty('template');
+    expect(session.id).toBe('sbx_fork');
+  });
+
+  it('reuses an existing snapshot (cross-process) without building', async () => {
+    const fork = makeMockSandbox({ sandboxId: 'sbx_fork' });
+    const name = snapshotName('recipe-B');
+    listSnapshotsMock.mockReturnValueOnce(
+      snapshotPage([{ snapshotId: `team/${name}:default`, names: [`team/${name}`] }]),
+    );
+    createMock.mockResolvedValueOnce(fork.sandbox); // only the fork, no build
+    const hook = onFirstCreate();
+
+    await createE2BSandbox({}).createSession({
+      sessionId: 's1',
+      identity: 'recipe-B',
+      onFirstCreate: hook,
+    });
+
+    expect(hook).not.toHaveBeenCalled(); // found → no build
+    expect(createMock).toHaveBeenCalledTimes(1); // only the fork
+    expect(createMock.mock.calls[0][0]).toBe(name);
+  });
+
+  it('builds once per identity within a process, forks each session', async () => {
+    const template = makeMockSandbox({ sandboxId: 'sbx_template' });
+    listSnapshotsMock.mockReturnValueOnce(snapshotPage([]));
+    createMock
+      .mockResolvedValueOnce(template.sandbox) // build
+      .mockResolvedValueOnce(makeMockSandbox({ sandboxId: 'sbx_fork1' }).sandbox)
+      .mockResolvedValueOnce(makeMockSandbox({ sandboxId: 'sbx_fork2' }).sandbox);
+    const hook = onFirstCreate();
+    const provider = createE2BSandbox({});
+
+    await provider.createSession({ sessionId: 'a', identity: 'recipe-C', onFirstCreate: hook });
+    await provider.createSession({ sessionId: 'b', identity: 'recipe-C', onFirstCreate: hook });
+
+    expect(hook).toHaveBeenCalledTimes(1); // built once
+    expect(listSnapshotsMock).toHaveBeenCalledTimes(1); // looked up once (cached after)
+    expect(createMock).toHaveBeenCalledTimes(3); // 1 template + 2 forks
+  });
+
+  it('without identity, keeps the fresh-create path (hook runs every time)', async () => {
+    const sb = makeMockSandbox();
+    createMock.mockResolvedValueOnce(sb.sandbox);
+    const hook = onFirstCreate();
+
+    await createE2BSandbox({}).createSession({ onFirstCreate: hook }); // no identity
+
+    expect(listSnapshotsMock).not.toHaveBeenCalled();
+    expect(sb.spies.createSnapshot).not.toHaveBeenCalled();
+    expect(hook).toHaveBeenCalledTimes(1);
+    expect(createMock).toHaveBeenCalledTimes(1);
   });
 });

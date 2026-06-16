@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {
   HarnessV1NetworkSandboxSession,
   HarnessV1SandboxProvider,
@@ -7,6 +8,11 @@ import { Sandbox } from 'e2b';
 import type { SandboxOpts } from 'e2b';
 import { E2BNetworkSandboxSession } from './e2b-network-sandbox-session';
 import { E2BSandboxSession } from './e2b-sandbox-session';
+
+type OnFirstCreate = (
+  session: SandboxSession,
+  opts: { abortSignal?: AbortSignal },
+) => Promise<void>;
 
 /**
  * Settings for {@link createE2BSandbox}. Two mutually-exclusive shapes:
@@ -65,6 +71,64 @@ const E2B_PROVIDER_ID = 'e2b-sandbox';
 const SESSION_METADATA_KEY = 'aiSdkSessionId';
 
 const DEFAULT_WORKING_DIRECTORY = '/home/user';
+
+const SNAPSHOT_NAME_PREFIX = 'ai-sdk-harness';
+const SNAPSHOT_LOOKUP_MAX_PAGES = 10;
+const SNAPSHOT_CACHE_KEY = Symbol.for('ai-sdk.harness.e2b-snapshot-names');
+type SnapshotNameCache = Map<string, Promise<string>>;
+
+/**
+ * In-process cache of in-flight/resolved snapshot builds, keyed by snapshot
+ * name. Dedups concurrent builds within a process; the durable, cross-process
+ * reuse comes from the named snapshot itself (found via `listSnapshots`).
+ */
+function getSnapshotCache(): SnapshotNameCache {
+  const globals = globalThis as { [SNAPSHOT_CACHE_KEY]?: SnapshotNameCache };
+  return (globals[SNAPSHOT_CACHE_KEY] ??= new Map());
+}
+
+/** Deterministic, E2B-safe snapshot name for a harness identity. (Exported for tests.) */
+export function snapshotName(identity: string): string {
+  const slug = identity
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40);
+  const hash = createHash('sha256').update(identity).digest('hex').slice(0, 12);
+  return `${SNAPSHOT_NAME_PREFIX}-${slug}-${hash}`;
+}
+
+/**
+ * Strip the team namespace and tag from a snapshot ref to its bare name.
+ * E2B returns names like `team-slug/ai-sdk-harness-x` and ids like
+ * `team-slug/ai-sdk-harness-x:default`.
+ */
+function snapshotBaseName(ref: string): string {
+  return (ref.split('/').pop() ?? ref).replace(/:[^/:]+$/, '');
+}
+
+/**
+ * Reject when `signal` aborts, without cancelling the underlying promise. Used
+ * so a caller can abort its own *wait* on a shared snapshot build without
+ * killing the build that other callers are awaiting.
+ */
+function withAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (signal == null) return promise;
+  if (signal.aborted) {
+    return Promise.reject(
+      signal.reason ?? new DOMException('Aborted', 'AbortError'),
+    );
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () =>
+      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise
+      .then(resolve, reject)
+      .finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
 
 function isWrapSettings(
   settings: E2BSandboxSettings,
@@ -156,6 +220,96 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
     };
   }
 
+  /** setupCommands for create-new mode (empty when wrapping a sandbox). */
+  private get setupCommands(): ReadonlyArray<string> {
+    return isWrapSettings(this.settings) ? [] : this.settings.setupCommands ?? [];
+  }
+
+  /**
+   * Per-identity snapshot reuse. Builds the recipe's snapshot once (running
+   * setupCommands + onFirstCreate, then `createSnapshot`), and returns a
+   * forkable snapshot name. The in-process cache dedups concurrent builds; the
+   * snapshot itself survives cold starts and is found via `listSnapshots`, so
+   * later sessions (even in other processes) fork from it instead of rebuilding.
+   */
+  private getOrCreateSnapshot(
+    identity: string,
+    onFirstCreate: OnFirstCreate,
+  ): Promise<string> {
+    const name = snapshotName(identity);
+    const cache = getSnapshotCache();
+    let pending = cache.get(name);
+    if (pending == null) {
+      // The build is shared across all callers for this identity, so it is not
+      // tied to any single caller's abort signal — one caller aborting must not
+      // cancel a build others are awaiting. Callers abort their own *wait* via
+      // `withAbort` at the call site. (Cross-process, two cold builds can race;
+      // both attach to the same snapshot name and are usable — one is wasted.)
+      pending = (async () => {
+        if (!(await this.snapshotExists(name))) {
+          await this.buildSnapshot(name, onFirstCreate);
+        }
+        return name;
+      })();
+      cache.set(name, pending);
+      pending.catch(() => cache.delete(name));
+    }
+    return pending;
+  }
+
+  /** Whether a snapshot with this bare name already exists (any process). */
+  private async snapshotExists(name: string): Promise<boolean> {
+    const conn = this.connectionOptions();
+    const paginator = Sandbox.listSnapshots({ ...conn, limit: 100 });
+    // No server-side name filter, so page client-side. Past the cap we treat it
+    // as a miss and rebuild — bounded cost, not a correctness bug.
+    for (
+      let page = 0;
+      paginator.hasNext && page < SNAPSHOT_LOOKUP_MAX_PAGES;
+      page++
+    ) {
+      const items = await paginator.nextItems(conn);
+      for (const info of items) {
+        if (
+          info.names?.some(n => snapshotBaseName(n) === name) ||
+          snapshotBaseName(info.snapshotId) === name
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Build the named snapshot: run setup + onFirstCreate on a throwaway sandbox,
+   * snapshot it, then kill it. The template sandbox is never tagged with a
+   * session id, so it can't be resumed by mistake. Runs without a caller abort
+   * signal — it's shared work (see `getOrCreateSnapshot`).
+   */
+  private async buildSnapshot(
+    name: string,
+    onFirstCreate: OnFirstCreate,
+  ): Promise<void> {
+    const sandbox = await Sandbox.create(this.createParams(undefined));
+    try {
+      const restricted = new E2BSandboxSession(sandbox);
+      for (const command of this.setupCommands) {
+        const result = await restricted.run({ command });
+        if (result.exitCode !== 0) {
+          throw new Error(
+            `E2B setupCommand failed (exit ${result.exitCode}): ${command}\n${result.stderr}`,
+          );
+        }
+      }
+      await onFirstCreate(restricted, {});
+      await sandbox.createSnapshot({ name, ...this.connectionOptions() });
+    } finally {
+      // Best-effort cleanup; never block on a stuck kill during teardown.
+      await sandbox.kill().catch(() => {});
+    }
+  }
+
   createSession = async (options?: {
     sessionId?: string;
     abortSignal?: AbortSignal;
@@ -180,6 +334,38 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
         ports: this.settings.bridgePorts,
         ownsLifecycle: false,
       });
+    }
+
+    // Per-identity reuse: build the recipe's snapshot once, then fork each
+    // session from it (the hook does not re-run on forks).
+    if (options?.identity != null && options?.onFirstCreate != null) {
+      const snapshotRef = await withAbort(
+        this.getOrCreateSnapshot(options.identity, options.onFirstCreate),
+        options.abortSignal,
+      );
+      // The snapshot ref is the template arg, so drop `template` from the opts.
+      const { template: _template, ...forkParams } = this.createParams(
+        options.sessionId,
+      );
+      const fork = await Sandbox.create(snapshotRef, {
+        ...forkParams,
+        ...(options.abortSignal ? { signal: options.abortSignal } : {}),
+      });
+      try {
+        const workingDirectory = await resolveWorkingDirectory(
+          fork,
+          options.abortSignal,
+        );
+        return new E2BNetworkSandboxSession({
+          sandbox: fork,
+          workingDirectory,
+          ports: this.advertisedPorts,
+          ownsLifecycle: true,
+        });
+      } catch (error) {
+        await fork.kill().catch(() => {});
+        throw error;
+      }
     }
 
     const sandbox = await Sandbox.create({
@@ -209,9 +395,8 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
         }
       }
 
-      // No per-identity snapshot reuse: run the one-time setup immediately after
-      // fresh create (spec-legal, like @ai-sdk/sandbox-just-bash). For cold-start
-      // reuse, bake setup into a custom E2B template instead.
+      // No identity (or no onFirstCreate): fresh create, run the hook now.
+      // (The identity + onFirstCreate path above handles snapshot reuse.)
       if (options?.onFirstCreate) {
         await options.onFirstCreate(restricted, {
           abortSignal: options.abortSignal,
