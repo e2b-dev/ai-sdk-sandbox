@@ -67,8 +67,21 @@ const E2B_PROVIDER_ID = 'e2b-sandbox';
  * Metadata key under which a session id is tagged at create time. E2B sandbox
  * ids are server-assigned, so `resumeSession` finds the sandbox by this tag
  * rather than by a deterministic name.
+ *
+ * Isolation note: `resumeSession` matches on this tag scoped to the provider's
+ * connection (`apiKey`/`domain`), so a sandbox can only ever be resumed from
+ * the same E2B account it was created on. The trust boundary is therefore the
+ * E2B API key. See the `resumeSession` doc for the multi-tenancy contract.
  */
 const SESSION_METADATA_KEY = 'aiSdkSessionId';
+
+/**
+ * Metadata key under which the harness `identity` is tagged at create time
+ * (when supplied). Recorded for ownership/auditing and to scope cleanup; the
+ * harness `resumeSession` contract carries only `sessionId`, so the provider
+ * cannot filter resume by identity at resume time.
+ */
+const IDENTITY_METADATA_KEY = 'aiSdkIdentity';
 
 const DEFAULT_WORKING_DIRECTORY = '/home/user';
 
@@ -201,7 +214,7 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
   }
 
   /** E2B create params from settings, stripped of provider-level keys. */
-  private createParams(sessionId?: string): SandboxOpts {
+  private createParams(sessionId?: string, identity?: string): SandboxOpts {
     if (isWrapSettings(this.settings)) return {};
     const {
       ports: _ports,
@@ -216,6 +229,7 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
       metadata: {
         ...metadata,
         ...(sessionId ? { [SESSION_METADATA_KEY]: sessionId } : {}),
+        ...(identity ? { [IDENTITY_METADATA_KEY]: identity } : {}),
       },
     };
   }
@@ -346,6 +360,7 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
       // The snapshot ref is the template arg, so drop `template` from the opts.
       const { template: _template, ...forkParams } = this.createParams(
         options.sessionId,
+        options.identity,
       );
       const fork = await Sandbox.create(snapshotRef, {
         ...forkParams,
@@ -369,7 +384,7 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
     }
 
     const sandbox = await Sandbox.create({
-      ...this.createParams(options?.sessionId),
+      ...this.createParams(options?.sessionId, options?.identity),
       ...(options?.abortSignal ? { signal: options.abortSignal } : {}),
     });
 
@@ -415,6 +430,17 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
     }
   };
 
+  /**
+   * Reattach to a sandbox created earlier with the same `sessionId`.
+   *
+   * Isolation: the harness `resumeSession` contract passes only `sessionId`
+   * (no `identity`), so the lookup is by `sessionId` metadata scoped to this
+   * provider's connection (`apiKey`/`domain`). Cross-account resume is thus
+   * impossible. Within a single account, the trust boundary is the API key:
+   * give each tenant its own provider (its own key). If one key is shared
+   * across tenants, the framework-issued `sessionId`s must be unguessable, or a
+   * caller who learns another tenant's `sessionId` could resume their sandbox.
+   */
   resumeSession = async (options: {
     sessionId: string;
     abortSignal?: AbortSignal;
