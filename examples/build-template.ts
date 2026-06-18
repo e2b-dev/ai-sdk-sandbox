@@ -2,21 +2,14 @@
  * Build custom E2B templates with the `e2b` SDK directly. A template's name is
  * what you then pass to `createE2BSandbox({ template })`.
  *
- * Templates are E2B's recommended path for fast sandboxes — much lighter and
- * faster than runtime snapshots. Builds run in E2B's cloud (no local Docker).
- *
  * Run once: E2B_API_KEY=... npx tsx --env-file-if-exists=.env examples/build-template.ts
- *
- * Tip: a brand-new template is slow on its very first sandbox — spin one up and
- * kill it once to pre-warm it.
  */
 import { Template, waitForPort } from 'e2b';
 
 // A claude-code harness template: E2B's base image + pnpm@9, with 2GB RAM.
 // The claude-code/codex adapters install their CLI + bridge in-sandbox via
 // pnpm, which the base template lacks and which OOMs at ~512MB-1GB; this bakes
-// pnpm in and gives enough headroom. (Or skip this and use the public `codex`
-// template + `setupCommands: ['sudo npm install -g pnpm@9']` — see examples/harness.ts.)
+// pnpm in and gives enough headroom. (Or skip this and use the public `codex` template.)
 const claudeCode = Template()
   .fromBaseImage()
   // base runs as the non-root `user`; a global npm install needs root.
