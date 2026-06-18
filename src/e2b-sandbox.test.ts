@@ -168,6 +168,15 @@ describe('createE2BSandbox (wrap existing)', () => {
       await session.setPorts!([5000, 6000]);
       expect(session.ports).toEqual([5000, 6000]);
     });
+
+    it('throws on a pre-aborted signal and leaves ports unchanged', async () => {
+      const { sandbox } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox, bridgePorts: [4000] }).createSession();
+      await expect(
+        session.setPorts!([5000], { abortSignal: AbortSignal.abort() }),
+      ).rejects.toThrow();
+      expect(session.ports).toEqual([4000]);
+    });
   });
 
   describe('bridgePorts', () => {

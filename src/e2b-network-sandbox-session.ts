@@ -72,8 +72,14 @@ export class E2BNetworkSandboxSession
   };
 
   // E2B reaches any listening port via getHost(), so "exposing" a port is just
-  // advertising it on `ports`. Full-replacement semantics per the spec.
-  setPorts = async (ports: ReadonlyArray<number>): Promise<void> => {
+  // advertising it on `ports`. Full-replacement semantics per the spec. There's
+  // no remote call to abort here; `abortSignal` is honoured only as a pre-check
+  // for parity with the spec signature and the rest of this class.
+  setPorts = async (
+    ports: ReadonlyArray<number>,
+    options?: { abortSignal?: AbortSignal },
+  ): Promise<void> => {
+    options?.abortSignal?.throwIfAborted();
     this.exposedPorts = [...ports];
   };
 
