@@ -3,8 +3,12 @@
  * `@ai-sdk/sandbox-vercel`'s README. No LLM, just the sandbox: create a
  * session, write a file, run a command, spawn a streaming process.
  *
- * `restricted()` returns an `Experimental_SandboxSession` — the same thing you
- * pass to an AI SDK tool via `experimental_sandbox`.
+ * `restricted()` returns an `Experimental_SandboxSession`: the same underlying
+ * sandbox, narrowed to the tool-safe surface (file I/O, run, spawn) with no
+ * lifecycle or network controls — exactly what you hand an AI SDK tool's
+ * `execute()` via `experimental_sandbox`. This example has no tool, so the call
+ * is here only to show that shape; the file/run/spawn calls below go through it
+ * while lifecycle (`destroy`) stays on the full `networkSession`.
  *
  * Run: E2B_API_KEY=... npx tsx --env-file-if-exists=.env examples/basic.ts
  */
@@ -13,6 +17,7 @@ import { createE2BSandbox } from '../src/index.js';
 const networkSession = await createE2BSandbox({
   template: 'base',
 }).createSession();
+// Same sandbox, narrower surface — illustrative here (nothing consumes it).
 const session = networkSession.restricted();
 
 try {

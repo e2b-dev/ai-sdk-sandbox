@@ -32,7 +32,7 @@ console.log(stdout); // "hi"
 await networkSandboxSession.stop();
 ```
 
-`restricted()` gives you an `Experimental_SandboxSession`, the safe, tool-facing view you can pass to any AI SDK tool via `experimental_sandbox`. The full session keeps the infra bits (`ports`, `getPortUrl`, `setNetworkPolicy`, `stop`) to itself, so only the harness reaches for them.
+`restricted()` gives you an `Experimental_SandboxSession`: the **same underlying sandbox**, narrowed to the tool-facing surface (file I/O, `run`, `spawn`) — not a separate or cheaper sandbox, just a view with the infra bits (`ports`, `getPortUrl`, `setNetworkPolicy`, `stop`) removed. That's the security boundary: code you hand the restricted view can't stop the box or change its network policy. Pass it to an AI SDK tool's `execute()` via `experimental_sandbox`; the full session stays with the harness. (See the [harness docs](https://ai-sdk.dev/v7/docs/ai-sdk-harnesses/overview) for the `restricted()` contract.)
 
 ### Settings
 
