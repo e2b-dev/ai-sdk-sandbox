@@ -58,6 +58,24 @@ function makeMockSandbox(overrides: Record<string, unknown> = {}): {
 
 const session = (sandbox: Sandbox) => new E2BSandboxSession(sandbox);
 
+/**
+ * A background CommandHandle that `wait()`s to `result` — what `commands.run`
+ * returns under `background: true`. A non-zero exit rejects `wait()` with
+ * `CommandExitError`, matching E2B.
+ */
+function runHandle(result: { exitCode: number; stdout: string; stderr: string }) {
+  return {
+    pid: 1234,
+    wait: vi.fn(async () => {
+      if (result.exitCode !== 0) {
+        throw new CommandExitError({ ...result, error: '' });
+      }
+      return result;
+    }),
+    kill: vi.fn(async () => true),
+  };
+}
+
 describe('E2BSandboxSession', () => {
   describe('description', () => {
     it('mentions the sandbox id', () => {
@@ -69,13 +87,17 @@ describe('E2BSandboxSession', () => {
   describe('run', () => {
     it('maps stdout/stderr/exitCode and sets no cwd by default', async () => {
       const { sandbox, spies } = makeMockSandbox();
-      spies.run.mockResolvedValueOnce({ exitCode: 0, stdout: 'hi\n', stderr: 'oops\n' });
+      spies.run.mockResolvedValueOnce(
+        runHandle({ exitCode: 0, stdout: 'hi\n', stderr: 'oops\n' }),
+      );
 
       const result = await session(sandbox).run({ command: 'echo hi' });
 
+      // background:true so the handle is killable on abort (E2B's request signal
+      // alone does not terminate the command).
       expect(spies.run).toHaveBeenCalledWith(
         'echo hi',
-        expect.objectContaining({ background: false }),
+        expect.objectContaining({ background: true }),
       );
       // No cwd unless the caller passes one (E2B defaults to the user's home).
       expect(spies.run.mock.calls[0][1].cwd).toBeUndefined();
@@ -84,18 +106,93 @@ describe('E2BSandboxSession', () => {
 
     it('forwards workingDirectory as cwd', async () => {
       const { sandbox, spies } = makeMockSandbox();
-      spies.run.mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+      spies.run.mockResolvedValueOnce(runHandle({ exitCode: 0, stdout: '', stderr: '' }));
       await session(sandbox).run({ command: 'ls', workingDirectory: '/work' });
       expect(spies.run).toHaveBeenCalledWith('ls', expect.objectContaining({ cwd: '/work' }));
     });
 
     it('returns non-zero exits in the result instead of throwing (CommandExitError)', async () => {
       const { sandbox, spies } = makeMockSandbox();
-      spies.run.mockRejectedValueOnce(
-        new CommandExitError({ exitCode: 2, stdout: 'partial', stderr: 'boom', error: 'x' }),
+      // E2B's wait() rejects with CommandExitError on non-zero exit; run() maps
+      // that back to a result.
+      spies.run.mockResolvedValueOnce(
+        runHandle({ exitCode: 2, stdout: 'partial', stderr: 'boom' }),
       );
       const result = await session(sandbox).run({ command: 'false' });
       expect(result).toEqual({ exitCode: 2, stdout: 'partial', stderr: 'boom' });
+    });
+
+    // A SIGKILLed command rejects wait() with CommandExitError; run() must
+    // surface the *abort reason* instead, never that killed-exit error.
+    const killedError = () =>
+      new CommandExitError({ exitCode: 137, stdout: '', stderr: '', error: 'killed' });
+
+    it('kills the command and surfaces the abort reason (aborted before wait)', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const ac = new AbortController();
+      const reason = new Error('cancelled');
+      const handle = runHandle({ exitCode: 0, stdout: '', stderr: '' });
+      // The abort lands while commands.run() is resolving, so by the time wait()
+      // runs the signal is already aborted and it rejects like a killed command.
+      handle.wait.mockImplementation(
+        () =>
+          new Promise((_resolve, reject) => {
+            if (ac.signal.aborted) reject(killedError());
+            else ac.signal.addEventListener('abort', () => reject(killedError()), { once: true });
+          }),
+      );
+      spies.run.mockResolvedValueOnce(handle);
+
+      const pending = session(sandbox).run({ command: 'sleep 60', abortSignal: ac.signal });
+      ac.abort(reason);
+      await expect(pending).rejects.toBe(reason);
+      expect(handle.kill).toHaveBeenCalledTimes(1);
+    });
+
+    it('kills the command and surfaces the abort reason (aborted during wait)', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const ac = new AbortController();
+      const reason = new Error('cancelled');
+      const handle = runHandle({ exitCode: 0, stdout: '', stderr: '' });
+      // wait() stays pending until the process is killed; killing it rejects
+      // wait() — modelling the real wait()/kill() coupling.
+      let settleWait: () => void;
+      let waitStarted!: () => void;
+      const started = new Promise<void>(resolve => {
+        waitStarted = resolve;
+      });
+      handle.wait.mockImplementation(
+        () =>
+          new Promise((_resolve, reject) => {
+            settleWait = () => reject(killedError());
+            waitStarted();
+          }),
+      );
+      handle.kill.mockImplementation(async () => {
+        settleWait();
+        return true;
+      });
+      spies.run.mockResolvedValueOnce(handle);
+
+      const pending = session(sandbox).run({ command: 'sleep 60', abortSignal: ac.signal });
+      await started; // wait() is pending and the abort listener is installed
+      ac.abort(reason);
+      await expect(pending).rejects.toBe(reason);
+      expect(handle.kill).toHaveBeenCalledTimes(1);
+    });
+
+    it('surfaces the abort reason when the start request is aborted', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const ac = new AbortController();
+      const reason = new Error('cancelled');
+      // Abort mid-start: commands.run() rejects before a handle exists.
+      spies.run.mockImplementationOnce(async () => {
+        ac.abort(reason);
+        throw new Error('request aborted');
+      });
+      await expect(
+        session(sandbox).run({ command: 'sleep 60', abortSignal: ac.signal }),
+      ).rejects.toBe(reason);
     });
 
     it('throws on pre-aborted signal', async () => {
@@ -242,6 +339,19 @@ describe('E2BSandboxSession', () => {
       ac.abort(new Error('cancelled'));
       await expect(proc.wait()).rejects.toThrow('cancelled');
       expect(killed).toBe(true);
+    });
+
+    it('surfaces the abort reason when the start request is aborted', async () => {
+      const reason = new Error('cancelled');
+      const ac = new AbortController();
+      // Abort mid-start: commands.run() rejects before a handle exists.
+      mock.spies.run.mockImplementationOnce(async () => {
+        ac.abort(reason);
+        throw new Error('request aborted');
+      });
+      await expect(
+        session(mock.sandbox).spawn({ command: 'sleep 100', abortSignal: ac.signal }),
+      ).rejects.toBe(reason);
     });
 
     it('kill() delegates to the underlying handle', async () => {

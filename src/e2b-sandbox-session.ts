@@ -40,24 +40,49 @@ export class E2BSandboxSession implements Experimental_SandboxSession {
   }): Promise<{ exitCode: number; stdout: string; stderr: string }> {
     abortSignal?.throwIfAborted();
 
-    const opts: CommandStartOpts & { background: false } = {
-      background: false,
+    // Run in the background to keep a killable handle: E2B's request signal only
+    // disconnects the stream, it does not terminate the command, so honouring the
+    // `abortSignal` contract (the running process is killed on abort) means
+    // killing the handle explicitly. The handle buffers stdout/stderr, so the
+    // result still carries the full output.
+    const opts: CommandStartOpts & { background: true } = {
+      background: true,
       envs: env,
       timeoutMs: 0, // disable E2B's 60s default; agent commands run long.
       signal: abortSignal,
       ...(workingDirectory !== undefined ? { cwd: workingDirectory } : {}),
     };
 
+    // A signal abort during start rejects before a handle exists; report the
+    // abort reason rather than E2B's request error.
+    const handle = await this.sandbox.commands
+      .run(command, opts)
+      .catch((error: unknown) => {
+        if (abortSignal?.aborted) {
+          throw abortSignal.reason ?? new DOMException('Aborted', 'AbortError');
+        }
+        throw error;
+      });
+
+    // Kill the command on abort; closing the request alone leaves it running.
+    if (abortSignal?.aborted) void handle.kill().catch(() => {});
+    const onAbort = () => void handle.kill().catch(() => {});
+    abortSignal?.addEventListener('abort', onAbort, { once: true });
+
     try {
-      const result = await this.sandbox.commands.run(command, opts);
+      const result = await handle.wait();
       return {
         exitCode: result.exitCode,
         stdout: result.stdout,
         stderr: result.stderr,
       };
     } catch (error) {
+      // The abort contract wants the abort reason surfaced, not E2B's error.
+      if (abortSignal?.aborted) {
+        throw abortSignal.reason ?? new DOMException('Aborted', 'AbortError');
+      }
       // Spec: `run` reports non-zero exits in the result, it does not throw.
-      // (E2B's `commands.run` throws `CommandExitError` on non-zero exit.)
+      // (E2B's `wait()` throws `CommandExitError` on non-zero exit.)
       if (error instanceof CommandExitError) {
         return {
           exitCode: error.exitCode,
@@ -66,6 +91,8 @@ export class E2BSandboxSession implements Experimental_SandboxSession {
         };
       }
       throw error;
+    } finally {
+      abortSignal?.removeEventListener('abort', onAbort);
     }
   }
 
@@ -274,9 +301,17 @@ async function createSandboxProcess(
     }
   };
 
+  // A signal abort during start rejects before a handle exists; report the
+  // abort reason rather than E2B's request error. (The remote process can't be
+  // killed here — there's no handle yet — but the rejection is at least correct.)
   const handle = await start({
     onStdout: data => stdoutController.enqueue(encoder.encode(data)),
     onStderr: data => stderrController.enqueue(encoder.encode(data)),
+  }).catch((error: unknown) => {
+    if (abortSignal?.aborted) {
+      throw abortSignal.reason ?? new DOMException('Aborted', 'AbortError');
+    }
+    throw error;
   });
 
   // Resolve the exit code once, and close the output streams as soon as the

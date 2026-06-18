@@ -1,6 +1,23 @@
 import type { Sandbox } from 'e2b';
+import { CommandExitError } from 'e2b';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createE2BSandbox, snapshotName } from './e2b-sandbox';
+
+/**
+ * Wrap a result as a background CommandHandle — what `commands.run` returns under
+ * `background: true`. A non-zero exit rejects `wait()` with `CommandExitError`,
+ * matching E2B; `E2BSandboxSession.run` maps that back to a result.
+ */
+function cmdHandle(result: { exitCode: number; stdout: string; stderr: string }) {
+  return {
+    pid: 1,
+    wait: async () => {
+      if (result.exitCode !== 0) throw new CommandExitError({ ...result, error: '' });
+      return result;
+    },
+    kill: async () => true,
+  };
+}
 
 const { createMock, connectMock, listMock, listSnapshotsMock } = vi.hoisted(
   () => ({
@@ -25,7 +42,13 @@ vi.mock('e2b', async importActual => {
 });
 
 function makeMockSandbox(overrides: Record<string, unknown> = {}) {
-  const run = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
+  // background:false (e.g. the provider's own `pwd`) returns a result directly;
+  // background:true (E2BSandboxSession.run) returns a killable handle.
+  const run = vi.fn(async (_command: string, opts?: { background?: boolean }) =>
+    opts?.background
+      ? cmdHandle({ exitCode: 0, stdout: '', stderr: '' })
+      : { exitCode: 0, stdout: '/home/user\n', stderr: '' },
+  );
   const getHost = vi.fn((port: number) => `${port}-sbx.e2b.app`);
   const updateNetwork = vi.fn(async () => {});
   const pause = vi.fn(async () => true);
@@ -83,7 +106,7 @@ describe('createE2BSandbox (wrap existing)', () => {
   it('restricted() returns a tool-safe session over the same sandbox', async () => {
     const { sandbox, spies } = makeMockSandbox();
     spies.run.mockResolvedValueOnce({ exitCode: 0, stdout: '/home/user\n', stderr: '' }); // pwd
-    spies.run.mockResolvedValueOnce({ exitCode: 0, stdout: 'ok\n', stderr: '' }); // echo
+    spies.run.mockResolvedValueOnce(cmdHandle({ exitCode: 0, stdout: 'ok\n', stderr: '' })); // echo
     const session = await createE2BSandbox({ sandbox }).createSession();
     const result = await session.restricted().run({ command: 'echo ok' });
     expect(result.stdout).toBe('ok\n');
@@ -209,7 +232,7 @@ describe('createE2BSandbox (create from scratch)', () => {
     const { sandbox, spies } = makeMockSandbox();
     spies.run
       .mockResolvedValueOnce({ exitCode: 0, stdout: '/home/user\n', stderr: '' }) // pwd
-      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'nope' }); // setup cmd
+      .mockResolvedValueOnce(cmdHandle({ exitCode: 1, stdout: '', stderr: 'nope' })); // setup cmd
     createMock.mockResolvedValueOnce(sandbox);
     await expect(
       createE2BSandbox({ setupCommands: ['do-thing'] }).createSession(),
@@ -230,7 +253,7 @@ describe('createE2BSandbox (create from scratch)', () => {
     const { sandbox, spies } = makeMockSandbox();
     spies.run
       .mockResolvedValueOnce({ exitCode: 0, stdout: '/home/user\n', stderr: '' }) // pwd
-      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'nope' }); // setup cmd
+      .mockResolvedValueOnce(cmdHandle({ exitCode: 1, stdout: '', stderr: 'nope' })); // setup cmd
     createMock.mockResolvedValueOnce(sandbox);
     await expect(
       createE2BSandbox({ setupCommands: ['do-thing'] }).createSession(),
