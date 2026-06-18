@@ -242,6 +242,21 @@ describe('createE2BSandbox (create from scratch)', () => {
     expect(fresh.spies.kill).toHaveBeenCalledTimes(1);
   });
 
+  it('destroy still kills an owned sandbox even when a prior stop failed', async () => {
+    const { sandbox, spies } = makeMockSandbox({
+      pause: vi.fn(async () => {
+        throw new Error('pause failed');
+      }),
+    });
+    createMock.mockResolvedValueOnce(sandbox);
+    const session = await createE2BSandbox({}).createSession();
+
+    // A failed stop must not leave the sandbox un-destroyable.
+    await expect(session.stop()).rejects.toThrow(/pause failed/);
+    await session.destroy?.();
+    expect(spies.kill).toHaveBeenCalledTimes(1);
+  });
+
   it('resumeSession looks the sandbox up by metadata and connects', async () => {
     const { sandbox } = makeMockSandbox();
     listMock.mockReturnValueOnce({ nextItems: async () => [{ sandboxId: 'sbx_found' }] });
