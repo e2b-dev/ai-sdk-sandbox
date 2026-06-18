@@ -18,7 +18,7 @@
  */
 import { HarnessAgent } from '@ai-sdk/harness/agent';
 import { createClaudeCode } from '@ai-sdk/harness-claude-code';
-import { createE2BSandbox } from '../src/index.js';
+import { createE2BSandbox } from '@e2b/ai-sdk-sandbox';
 
 const agent = new HarnessAgent({
   harness: createClaudeCode({

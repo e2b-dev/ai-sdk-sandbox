@@ -6,7 +6,7 @@
  *
  * Run: E2B_API_KEY=... npx tsx --env-file-if-exists=.env examples/resume.ts
  */
-import { createE2BSandbox } from '../src/index.js';
+import { createE2BSandbox } from '@e2b/ai-sdk-sandbox';
 
 const provider = createE2BSandbox({ template: 'base' });
 const sessionId = `demo-${process.pid}`;

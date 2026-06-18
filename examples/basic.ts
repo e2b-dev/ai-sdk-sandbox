@@ -12,7 +12,7 @@
  *
  * Run: E2B_API_KEY=... npx tsx --env-file-if-exists=.env examples/basic.ts
  */
-import { createE2BSandbox } from '../src/index.js';
+import { createE2BSandbox } from '@e2b/ai-sdk-sandbox';
 
 const networkSession = await createE2BSandbox({
   template: 'base',

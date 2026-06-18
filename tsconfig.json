@@ -9,7 +9,8 @@
     "skipLibCheck": true,
     "declaration": true,
     "outDir": "dist",
-    "types": ["node"]
+    "types": ["node"],
+    "paths": { "@e2b/ai-sdk-sandbox": ["./src/index.ts"] }
   },
   "include": ["src", "examples"]
 }
