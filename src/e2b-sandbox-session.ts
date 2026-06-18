@@ -9,9 +9,9 @@ import type { CommandStartOpts } from 'e2b';
 /**
  * `Experimental_SandboxSession` implementation backed by an E2B `Sandbox`. This
  * is the tool-safe surface (file I/O, `run`, `spawn`); it is what
- * {@link import('./e2b-network-sandbox-session').E2BNetworkSandboxSession.restricted}
- * returns and is not constructed directly by consumers. The network sandbox
- * session owns the lifetime of the underlying sandbox.
+ * `E2BNetworkSandboxSession.restricted()` returns and is not constructed
+ * directly by consumers. The network sandbox session owns the lifetime of the
+ * underlying sandbox.
  */
 export class E2BSandboxSession implements Experimental_SandboxSession {
   constructor(protected readonly sandbox: Sandbox) {}
