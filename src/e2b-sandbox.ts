@@ -156,7 +156,6 @@ async function resolveWorkingDirectory(
 ): Promise<string> {
   try {
     const { stdout } = await sandbox.commands.run('pwd', {
-      background: false,
       ...(abortSignal ? { signal: abortSignal } : {}),
     });
     const dir = stdout.trim();
