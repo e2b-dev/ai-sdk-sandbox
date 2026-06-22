@@ -1,7 +1,7 @@
 {
   "name": "@e2b/ai-sdk-sandbox",
   "version": "0.1.0",
-  "description": "E2B sandbox provider for the Vercel AI SDK (v7 harness sandbox spec)",
+  "description": "E2B sandbox provider for the Vercel AI SDK",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
