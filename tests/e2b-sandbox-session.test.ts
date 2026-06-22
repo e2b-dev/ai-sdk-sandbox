@@ -206,10 +206,14 @@ describe('E2BSandboxSession', () => {
   });
 
   describe('file I/O', () => {
-    it('writeTextFile passes the path straight to files.write', async () => {
+    it('writeTextFile encodes the content and writes the bytes', async () => {
       const { sandbox, spies } = makeMockSandbox();
       await session(sandbox).writeTextFile({ path: 'hello.txt', content: 'hi' });
-      expect(spies.write).toHaveBeenCalledWith('hello.txt', 'hi', undefined);
+      const [path, buffer] = spies.write.mock.calls[0];
+      expect(path).toBe('hello.txt');
+      expect(new Uint8Array(buffer as ArrayBuffer)).toEqual(
+        new TextEncoder().encode('hi'),
+      );
     });
 
     it('writeBinaryFile sends a standalone ArrayBuffer of the bytes', async () => {

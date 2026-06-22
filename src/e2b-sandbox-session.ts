@@ -232,16 +232,6 @@ export class E2BSandboxSession implements Experimental_SandboxSession {
     encoding?: string;
     abortSignal?: AbortSignal;
   }): Promise<void> {
-    if (encoding === 'utf-8' || encoding === 'utf8') {
-      // E2B accepts strings directly (UTF-8); avoid a needless byte copy.
-      abortSignal?.throwIfAborted();
-      await this.sandbox.files.write(
-        path,
-        content,
-        abortSignal ? { signal: abortSignal } : undefined,
-      );
-      return;
-    }
     const buffer = Buffer.from(content, encoding as BufferEncoding);
     await this.writeBinaryFile({
       path,
