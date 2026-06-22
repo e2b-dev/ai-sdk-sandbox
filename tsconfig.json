@@ -12,5 +12,5 @@
     "types": ["node"],
     "paths": { "@e2b/ai-sdk-sandbox": ["./src/index.ts"] }
   },
-  "include": ["src", "examples"]
+  "include": ["src", "tests", "examples"]
 }

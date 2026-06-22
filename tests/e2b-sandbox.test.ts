@@ -1,7 +1,7 @@
 import type { Sandbox } from 'e2b';
 import { CommandExitError } from 'e2b';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createE2BSandbox, snapshotName } from './e2b-sandbox';
+import { createE2BSandbox, snapshotName } from '../src/e2b-sandbox';
 
 /**
  * Wrap a result as a background CommandHandle — what `commands.run` returns under

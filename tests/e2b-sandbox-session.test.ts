@@ -1,7 +1,7 @@
 import type { Sandbox } from 'e2b';
 import { CommandExitError, FileNotFoundError } from 'e2b';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { E2BSandboxSession } from './e2b-sandbox-session';
+import { E2BSandboxSession } from '../src/e2b-sandbox-session';
 
 const decoder = new TextDecoder();
 
