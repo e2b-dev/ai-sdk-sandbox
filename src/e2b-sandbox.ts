@@ -8,6 +8,7 @@ import { Sandbox } from 'e2b';
 import type { SandboxOpts } from 'e2b';
 import { E2BNetworkSandboxSession } from './e2b-network-sandbox-session';
 import { E2BSandboxSession } from './e2b-sandbox-session';
+import { withAbort } from './utils';
 
 type OnFirstCreate = (
   session: SandboxSession,
@@ -119,28 +120,6 @@ export function snapshotName(identity: string): string {
  */
 function snapshotBaseName(ref: string): string {
   return (ref.split('/').pop() ?? ref).replace(/:[^/:]+$/, '');
-}
-
-/**
- * Reject when `signal` aborts, without cancelling the underlying promise. Used
- * so a caller can abort its own *wait* on a shared snapshot build without
- * killing the build that other callers are awaiting.
- */
-function withAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (signal == null) return promise;
-  if (signal.aborted) {
-    return Promise.reject(
-      signal.reason ?? new DOMException('Aborted', 'AbortError'),
-    );
-  }
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () =>
-      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
-    signal.addEventListener('abort', onAbort, { once: true });
-    promise
-      .then(resolve, reject)
-      .finally(() => signal.removeEventListener('abort', onAbort));
-  });
 }
 
 function isWrapSettings(
