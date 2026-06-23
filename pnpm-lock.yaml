@@ -9,18 +9,18 @@ importers:
   .:
     dependencies:
       '@ai-sdk/harness':
-        specifier: canary
-        version: 1.0.0-canary.13(ws@8.21.0)(zod@3.25.76)
+        specifier: beta
+        version: 1.0.0-beta.21(ws@8.21.0)(zod@3.25.76)
       '@ai-sdk/provider-utils':
-        specifier: canary
-        version: 5.0.0-canary.48(zod@3.25.76)
+        specifier: beta
+        version: 5.0.0-beta.49(zod@3.25.76)
       e2b:
         specifier: ^2.29.1
         version: 2.30.5
     devDependencies:
       '@ai-sdk/harness-claude-code':
-        specifier: canary
-        version: 1.0.0-canary.9
+        specifier: beta
+        version: 1.0.0-beta.18
       '@changesets/cli':
         specifier: ^2.27.0
         version: 2.31.0(@types/node@25.9.4)
@@ -42,33 +42,33 @@ importers:
 
 packages:
 
-  '@ai-sdk/gateway@4.0.0-canary.107':
-    resolution: {integrity: sha512-BPmARy2rc0ChkmoMhrmHa+L5lg7HWO8BZ1bMEWx3m3wH6lSy7a2CFu4T28PC2qaCPuWgpu5+PnSWC9eMpZh9rQ==}
+  '@ai-sdk/gateway@4.0.0-beta.111':
+    resolution: {integrity: sha512-XiO6tNHoD3jJmpe0fGsEDOSz/NqexKlCcqu/FebXXX7PBfKjY5DINd1Ac28vHzRItaBfLs94TWPxTHUsYPH0gw==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/harness-claude-code@1.0.0-canary.9':
-    resolution: {integrity: sha512-sfewPgZF3HxXoxcCECeCEGNkGlh9b/mJE3yClIEImG27nAvBPQV+CUc8obP5WK19i1fWq68F+FtGuXVCkPvkUA==}
+  '@ai-sdk/harness-claude-code@1.0.0-beta.18':
+    resolution: {integrity: sha512-CrJ30xTljHT8G+UkkGQXqaPopqNkd6KDLbxTEhpq/CUakw7PUy+QNWqmuntGkRuGU8UiuRw09RAd8VUJmUTw9w==}
     engines: {node: '>=22'}
 
-  '@ai-sdk/harness@1.0.0-canary.13':
-    resolution: {integrity: sha512-SCifKEH8VmOOLTWVZSsvxPbOHWd7a2puJMP1jS0LAmqxQwVm+DtPoPdW9iWAe8fORkhhRK2TzbBFi+JtbsDbrA==}
+  '@ai-sdk/harness@1.0.0-beta.21':
+    resolution: {integrity: sha512-GCsnSd0k2xHa3fKVNsHepiPRUNd9EK2OzDb8zt+Kddllnr0nuIcAq6NBw88/G36In2SBjIDJhmP7pPFj4iq4Xg==}
     engines: {node: '>=22'}
     peerDependencies:
-      ws: ^8.20.1
+      ws: ^8.21.0
     peerDependenciesMeta:
       ws:
         optional: true
 
-  '@ai-sdk/provider-utils@5.0.0-canary.48':
-    resolution: {integrity: sha512-340rMqAnqHDZOKS9ayrRbNr0/Om+orcopAnqJ7ftfEskxDUCTcudmhAhctFMSQeMzDnKaBPgz+4iff/hn7PkqQ==}
+  '@ai-sdk/provider-utils@5.0.0-beta.49':
+    resolution: {integrity: sha512-7xnpAQLpW0KGIsh0CQERcIZuXEGqv7FtFW2BdFk14iuMxRMVpXhTVvEQyqkm6tWAbQ7OsGQJhO6M0Me9gHQ52g==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider@4.0.0-canary.18':
-    resolution: {integrity: sha512-+XBwXEPkN+l/90bb7TaSK15jAq9ScsGrauJ/NLSGip0KX5Mf1pfEfqBWDuJMIYVRYHNdV1dDBy7JCoKUCQe/tA==}
+  '@ai-sdk/provider@4.0.0-beta.19':
+    resolution: {integrity: sha512-Aca/KiGeRtMM7rOJ38Qio+Dc2V45PpiGoWgdrdtIkgM9zkhYpS043t0ggKoNOWgm/csv99XWGrfSF63PSkVeHw==}
     engines: {node: '>=22'}
 
   '@babel/runtime@7.29.7':
@@ -801,8 +801,8 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  ai@7.0.0-canary.176:
-    resolution: {integrity: sha512-0a+PeTou1uLouzrlLaEZNyBj21oFyYCI1BeOrP9uLJ2YGW6tsUAGME6zetfDdbl/bouIc4neUA36sH7mNjNp1g==}
+  ai@7.0.0-beta.183:
+    resolution: {integrity: sha512-SPa4Q1waZ+MKQrnRY79F02wEzeo8kH6U1rRgs0tiBnNejprv0L+qoCFXeQSPqdog9TwkCytjY8QF8ujFz9CQnA==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -1633,42 +1633,42 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/gateway@4.0.0-canary.107(zod@3.25.76)':
+  '@ai-sdk/gateway@4.0.0-beta.111(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 4.0.0-canary.18
-      '@ai-sdk/provider-utils': 5.0.0-canary.48(zod@3.25.76)
+      '@ai-sdk/provider': 4.0.0-beta.19
+      '@ai-sdk/provider-utils': 5.0.0-beta.49(zod@3.25.76)
       '@vercel/oidc': 3.2.0
       zod: 3.25.76
 
-  '@ai-sdk/harness-claude-code@1.0.0-canary.9':
+  '@ai-sdk/harness-claude-code@1.0.0-beta.18':
     dependencies:
-      '@ai-sdk/harness': 1.0.0-canary.13(ws@8.21.0)(zod@3.25.76)
-      '@ai-sdk/provider-utils': 5.0.0-canary.48(zod@3.25.76)
+      '@ai-sdk/harness': 1.0.0-beta.21(ws@8.21.0)(zod@3.25.76)
+      '@ai-sdk/provider-utils': 5.0.0-beta.49(zod@3.25.76)
       ws: 8.21.0
       zod: 3.25.76
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@ai-sdk/harness@1.0.0-canary.13(ws@8.21.0)(zod@3.25.76)':
+  '@ai-sdk/harness@1.0.0-beta.21(ws@8.21.0)(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 4.0.0-canary.18
-      '@ai-sdk/provider-utils': 5.0.0-canary.48(zod@3.25.76)
-      ai: 7.0.0-canary.176(zod@3.25.76)
+      '@ai-sdk/provider': 4.0.0-beta.19
+      '@ai-sdk/provider-utils': 5.0.0-beta.49(zod@3.25.76)
+      ai: 7.0.0-beta.183(zod@3.25.76)
     optionalDependencies:
       ws: 8.21.0
     transitivePeerDependencies:
       - zod
 
-  '@ai-sdk/provider-utils@5.0.0-canary.48(zod@3.25.76)':
+  '@ai-sdk/provider-utils@5.0.0-beta.49(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 4.0.0-canary.18
+      '@ai-sdk/provider': 4.0.0-beta.19
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.1.0
       zod: 3.25.76
 
-  '@ai-sdk/provider@4.0.0-canary.18':
+  '@ai-sdk/provider@4.0.0-beta.19':
     dependencies:
       json-schema: 0.4.0
 
@@ -2259,11 +2259,11 @@ snapshots:
 
   acorn@8.17.0: {}
 
-  ai@7.0.0-canary.176(zod@3.25.76):
+  ai@7.0.0-beta.183(zod@3.25.76):
     dependencies:
-      '@ai-sdk/gateway': 4.0.0-canary.107(zod@3.25.76)
-      '@ai-sdk/provider': 4.0.0-canary.18
-      '@ai-sdk/provider-utils': 5.0.0-canary.48(zod@3.25.76)
+      '@ai-sdk/gateway': 4.0.0-beta.111(zod@3.25.76)
+      '@ai-sdk/provider': 4.0.0-beta.19
+      '@ai-sdk/provider-utils': 5.0.0-beta.49(zod@3.25.76)
       zod: 3.25.76
 
   ansi-colors@4.1.3: {}

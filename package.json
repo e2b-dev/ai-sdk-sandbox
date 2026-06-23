@@ -43,12 +43,12 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@ai-sdk/harness": "canary",
-    "@ai-sdk/provider-utils": "canary",
+    "@ai-sdk/harness": "beta",
+    "@ai-sdk/provider-utils": "beta",
     "e2b": "^2.29.1"
   },
   "devDependencies": {
-    "@ai-sdk/harness-claude-code": "canary",
+    "@ai-sdk/harness-claude-code": "beta",
     "@changesets/cli": "^2.27.0",
     "@types/node": "^25.9.3",
     "tsup": "^8.0.0",

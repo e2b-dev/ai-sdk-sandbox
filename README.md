@@ -1,6 +1,6 @@
 # AI SDK - E2B Sandbox
 
-_This package is **experimental** and tracks the AI SDK 7 canary._
+_This package is **experimental** and tracks the AI SDK 7 beta._
 
 Run your agent's code inside [E2B](https://e2b.dev) sandboxes from the [AI SDK](https://ai-sdk.dev). It's the E2B counterpart to [@ai-sdk/sandbox-vercel](https://github.com/vercel/ai/tree/main/packages/sandbox-vercel). Drop it into a `HarnessAgent`, or hand a session straight to your AI SDK tools.
 
