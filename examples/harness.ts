@@ -7,11 +7,11 @@
  * harness bridge (a WebSocket to a port the sandbox exposes via getPortUrl).
  *
  * On first boot the adapter installs its own pinned claude-code CLI + bridge
- * inside the sandbox via pnpm (it doesn't use a system `claude`, so a template
- * with claude pre-baked doesn't help). The only template requirement is pnpm,
- * which the public `base` template lacks — so we add it via `setupCommands`.
- * For a faster cold start, bake pnpm into a custom template (see
- * build-template.ts) and drop `setupCommands`. Override with E2B_TEMPLATE.
+ * inside the sandbox via pnpm (it doesn't use a system `claude`). That install
+ * pulls claude-code's ~238MB native binary, and pnpm staging it peaks ~1.5GB, so
+ * the sandbox needs ~2GB RAM and pnpm. E2B RAM is fixed at template-build time
+ * (not per sandbox), so use a 2GB template with pnpm baked in: build
+ * `claude-code-harness` once with build-template.ts. Override via E2B_TEMPLATE.
  *
  * Run: E2B_API_KEY=... ANTHROPIC_API_KEY=... npx tsx --env-file-if-exists=.env examples/harness.ts
  */
@@ -27,10 +27,10 @@ const agent = new HarnessAgent({
     startupTimeoutMs: 300_000,
   }),
   sandbox: createE2BSandbox({
-    template: process.env.E2B_TEMPLATE ?? 'base',
+    // Built by build-template.ts (base image + pnpm + 2GB RAM).
+    template: process.env.E2B_TEMPLATE ?? 'claude-code-harness',
     ports: [4000], // bridge port — the adapter binds to ports[0]
     timeoutMs: 30 * 60 * 1000,
-    setupCommands: ['sudo npm install -g pnpm@9'], // base lacks pnpm; the adapter needs it
   }),
 });
 

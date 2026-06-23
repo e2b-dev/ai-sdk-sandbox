@@ -87,14 +87,13 @@ await sandboxSession.setNetworkPolicy?.({
 const agent = new HarnessAgent({
   harness: createClaudeCode(),
   sandbox: createE2BSandbox({
-    template: 'base',
+    template: 'claude-code-harness', // base image + pnpm + 2GB, built via build-template.ts
     ports: [4000],
-    setupCommands: ['sudo npm install -g pnpm@9'],
   }),
 });
 ```
 
-One thing to know about templates: the claude-code adapter installs its own pinned CLI and bridge inside the sandbox with pnpm (it doesn't use a system `claude`), so the only template requirement is pnpm. E2B's `base` template doesn't ship it, so add it with a one-line `setupCommands`, as above. For a faster cold start, bake pnpm into your own template once with `examples/build-template.ts`. A full, runnable version lives in `examples/harness.ts`.
+One thing to know about templates: the claude-code adapter installs its own pinned CLI and bridge inside the sandbox with pnpm (it doesn't use a system `claude`). That install pulls claude-code's ~238 MB native binary, and pnpm staging it peaks around 1.5 GB — so the sandbox needs pnpm **and** ~2 GB of RAM. E2B RAM is fixed at template-build time (you can't set it per sandbox), so build a 2 GB template with pnpm baked in via `examples/build-template.ts` and pass its name. (For comparison, `@ai-sdk/sandbox-vercel` doesn't need this because Vercel sandboxes default to ~4 GB.) A full, runnable version lives in `examples/harness.ts`.
 
 ## Good to know
 
