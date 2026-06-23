@@ -6,13 +6,12 @@
  * Claude Code runs *inside* an E2B sandbox; the host talks to it over the
  * harness bridge (a WebSocket to a port the sandbox exposes via getPortUrl).
  *
- * Zero-build: runs on E2B's public `codex` template (~2GB RAM, node) and adds
- * pnpm via `setupCommands` (the adapter bootstrap needs pnpm). We borrow the
- * `codex` template purely for its 2GB sizing — the public `claude-code`
- * template is only ~1GB and OOM-kills during the adapter's in-sandbox install.
- *
- * For a clean, named, pnpm-baked-in template instead, build `claude-code-harness`
- * with examples/build-template.ts and set E2B_TEMPLATE=claude-code-harness.
+ * On first boot the adapter installs its own pinned claude-code CLI + bridge
+ * inside the sandbox via pnpm (it doesn't use a system `claude`, so a template
+ * with claude pre-baked doesn't help). The only template requirement is pnpm,
+ * which the public `base` template lacks — so we add it via `setupCommands`.
+ * For a faster cold start, bake pnpm into a custom template (see
+ * build-template.ts) and drop `setupCommands`. Override with E2B_TEMPLATE.
  *
  * Run: E2B_API_KEY=... ANTHROPIC_API_KEY=... npx tsx --env-file-if-exists=.env examples/harness.ts
  */
@@ -24,19 +23,14 @@ const agent = new HarnessAgent({
   harness: createClaudeCode({
     auth: { anthropic: { apiKey: process.env.ANTHROPIC_API_KEY! } },
     model: process.env.MODEL ?? 'claude-haiku-4-5',
-    // First run installs the claude-code CLI inside the sandbox via pnpm; give it room.
+    // First boot installs the claude-code CLI inside the sandbox via pnpm; give it room.
     startupTimeoutMs: 300_000,
   }),
   sandbox: createE2BSandbox({
-    // Public 2GB template + pnpm at runtime. Override with a custom template
-    // (e.g. E2B_TEMPLATE=claude-code-harness) that already has pnpm baked in.
-    template: process.env.E2B_TEMPLATE ?? 'codex',
+    template: process.env.E2B_TEMPLATE ?? 'base',
     ports: [4000], // bridge port — the adapter binds to ports[0]
     timeoutMs: 30 * 60 * 1000,
-    // Skip the runtime install when the template already ships pnpm.
-    ...(process.env.E2B_TEMPLATE
-      ? {}
-      : { setupCommands: ['sudo npm install -g pnpm@9'] }),
+    setupCommands: ['sudo npm install -g pnpm@9'], // base lacks pnpm; the adapter needs it
   }),
 });
 
