@@ -20,13 +20,16 @@
   "files": [
     "dist/**/*",
     "src",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",
     "type-check": "tsc --noEmit",
     "test": "vitest --run",
     "test:watch": "vitest",
+    "version": "changeset version",
+    "release": "pnpm run build && changeset publish",
     "example:basic": "tsx --env-file-if-exists=.env examples/basic.ts",
     "example:harness": "tsx --env-file-if-exists=.env examples/harness.ts",
     "example:resume": "tsx --env-file-if-exists=.env examples/resume.ts"
@@ -46,6 +49,7 @@
   },
   "devDependencies": {
     "@ai-sdk/harness-claude-code": "canary",
+    "@changesets/cli": "^2.27.0",
     "@types/node": "^25.9.3",
     "tsup": "^8.0.0",
     "tsx": "^4.0.0",
@@ -54,5 +58,6 @@
   },
   "engines": {
     "node": ">=22"
-  }
+  },
+  "packageManager": "pnpm@9.15.9"
 }
