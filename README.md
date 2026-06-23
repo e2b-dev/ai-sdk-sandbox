@@ -21,18 +21,21 @@ import { createE2BSandbox } from '@e2b/ai-sdk-sandbox';
 
 const e2bSandbox = createE2BSandbox({ template: 'base' });
 
-const networkSandboxSession = await e2bSandbox.createSession();
-const sandboxSession = networkSandboxSession.restricted();
+const sandboxSession = await e2bSandbox.createSession();
+// restricted() returns the same sandbox narrowed to the tool-safe surface
+// (file I/O, run, spawn) with no lifecycle or network controls — this is what
+// you hand an AI SDK tool's execute().
+const restrictedSandboxSession = sandboxSession.restricted();
 
-await sandboxSession.writeTextFile({ path: 'hello.txt', content: 'hi' });
+await restrictedSandboxSession.writeTextFile({ path: 'hello.txt', content: 'hi' });
 
-const { stdout } = await sandboxSession.run({ command: 'cat hello.txt' });
+const { stdout } = await restrictedSandboxSession.run({ command: 'cat hello.txt' });
 console.log(stdout); // "hi"
 
-await networkSandboxSession.stop();
+await sandboxSession.stop();
 ```
 
-`restricted()` gives you an `Experimental_SandboxSession`: the **same underlying sandbox**, narrowed to the tool-facing surface (file I/O, `run`, `spawn`) — not a separate or cheaper sandbox, just a view with the infra bits (`ports`, `getPortUrl`, `setNetworkPolicy`, `stop`) removed. That's the security boundary: code you hand the restricted view can't stop the box or change its network policy. Pass it to an AI SDK tool's `execute()` via `experimental_sandbox`; the full session stays with the harness. (See the [harness docs](https://ai-sdk.dev/v7/docs/ai-sdk-harnesses/overview) for the `restricted()` contract.)
+`restricted()` gives you an `Experimental_SandboxSession`: the **same underlying sandbox**, narrowed to the tool-facing surface (file I/O, `run`, `spawn`), just a view with the infra bits (`ports`, `getPortUrl`, `setNetworkPolicy`, `stop`) removed. That's the security boundary: code you hand the restricted view can't stop the box or change its network policy. Pass it to an AI SDK tool's `execute()` via `experimental_sandbox`; the full session stays with the harness. (See the [harness docs](https://ai-sdk.dev/v7/docs/ai-sdk-harnesses/overview) for the `restricted()` contract.)
 
 ### Settings
 
@@ -71,7 +74,7 @@ const e2bSandbox = createE2BSandbox({
 You can tighten or loosen outbound access on a sandbox that's already running:
 
 ```ts
-await networkSandboxSession.setNetworkPolicy?.({
+await sandboxSession.setNetworkPolicy?.({
   mode: 'custom',
   allowedHosts: ['api.example.com'],
   deniedCIDRs: ['169.254.169.254/32'],
@@ -84,13 +87,14 @@ await networkSandboxSession.setNetworkPolicy?.({
 const agent = new HarnessAgent({
   harness: createClaudeCode(),
   sandbox: createE2BSandbox({
-    template: 'codex',
+    template: 'base',
+    ports: [4000],
     setupCommands: ['sudo npm install -g pnpm@9'],
   }),
 });
 ```
 
-One thing to know about templates: the claude-code and codex adapters install their CLI and bridge inside the sandbox with pnpm, so the box needs pnpm and ~2 GB of RAM. E2B's `base` template is too small and will OOM. The quickest path is E2B's public `codex` template (it's already ~2 GB) plus a one-line `setupCommands` to add pnpm, as above. For something cleaner, bake your own template once with `examples/build-template.ts`. A full, runnable version lives in `examples/harness.ts`.
+One thing to know about templates: the claude-code adapter installs its own pinned CLI and bridge inside the sandbox with pnpm (it doesn't use a system `claude`), so the only template requirement is pnpm. E2B's `base` template doesn't ship it, so add it with a one-line `setupCommands`, as above. For a faster cold start, bake pnpm into your own template once with `examples/build-template.ts`. A full, runnable version lives in `examples/harness.ts`.
 
 ## Good to know
 
@@ -106,7 +110,7 @@ A few E2B-specific behaviors worth knowing:
 - `examples/basic.ts`: the session surface on its own (write, run, spawn)
 - `examples/harness.ts`: Claude Code working inside an E2B sandbox
 - `examples/resume.ts`: pause a sandbox and pick it back up
-- `examples/build-template.ts`: build a custom template (incl. a `setStartCmd` + `waitForPort` pre-warm recipe) to pass as `template`
+- `examples/build-template.ts`: build a custom template (bakes pnpm in) to pass as `template`
 
 Run any of them with `npm run example:basic` (they read `.env`).
 
