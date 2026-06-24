@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_call: # reused by the Release workflow's test gate
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -20,8 +21,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: ".tool-versions"
           cache: pnpm
+
+      - name: Configure pnpm
+        run: pnpm config set auto-install-peers true
 
       - run: pnpm install --frozen-lockfile
 
