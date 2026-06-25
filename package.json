@@ -45,7 +45,7 @@
   "dependencies": {
     "@ai-sdk/harness": "beta",
     "@ai-sdk/provider-utils": "beta",
-    "e2b": "^2.29.1"
+    "e2b": "^2.30.6"
   },
   "devDependencies": {
     "@ai-sdk/harness-claude-code": "beta",
