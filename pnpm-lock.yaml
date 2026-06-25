@@ -9,18 +9,18 @@ importers:
   .:
     dependencies:
       '@ai-sdk/harness':
-        specifier: beta
-        version: 1.0.0-beta.21(ws@8.21.0)(zod@3.25.76)
+        specifier: ^1.0.0
+        version: 1.0.0(ws@8.21.0)(zod@3.25.76)
       '@ai-sdk/provider-utils':
-        specifier: beta
-        version: 5.0.0-beta.49(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.0(zod@3.25.76)
       e2b:
         specifier: ^2.30.6
         version: 2.30.6
     devDependencies:
       '@ai-sdk/harness-claude-code':
-        specifier: beta
-        version: 1.0.0-beta.18
+        specifier: ^1.0.0
+        version: 1.0.0
       '@changesets/cli':
         specifier: ^2.27.0
         version: 2.31.0(@types/node@25.9.4)
@@ -42,18 +42,18 @@ importers:
 
 packages:
 
-  '@ai-sdk/gateway@4.0.0-beta.111':
-    resolution: {integrity: sha512-XiO6tNHoD3jJmpe0fGsEDOSz/NqexKlCcqu/FebXXX7PBfKjY5DINd1Ac28vHzRItaBfLs94TWPxTHUsYPH0gw==}
+  '@ai-sdk/gateway@4.0.0':
+    resolution: {integrity: sha512-rcKukspbM4h511ot2E8TsPl7rXjRK1zHKrMCP7w4+XF55UKqQHaDzo2kKbGv5rp8Bjb1yQatIHJZE1E2yrOOMw==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/harness-claude-code@1.0.0-beta.18':
-    resolution: {integrity: sha512-CrJ30xTljHT8G+UkkGQXqaPopqNkd6KDLbxTEhpq/CUakw7PUy+QNWqmuntGkRuGU8UiuRw09RAd8VUJmUTw9w==}
+  '@ai-sdk/harness-claude-code@1.0.0':
+    resolution: {integrity: sha512-yMqJ0F8tRbWi7zuutVOxY0nSB7SKl6SRCNPrE0L6HXTwUocuaKO6Av4kVVhVUpyUU1Kuc56x5Qc7JyTz32oREw==}
     engines: {node: '>=22'}
 
-  '@ai-sdk/harness@1.0.0-beta.21':
-    resolution: {integrity: sha512-GCsnSd0k2xHa3fKVNsHepiPRUNd9EK2OzDb8zt+Kddllnr0nuIcAq6NBw88/G36In2SBjIDJhmP7pPFj4iq4Xg==}
+  '@ai-sdk/harness@1.0.0':
+    resolution: {integrity: sha512-XNAnCdw0nFt2qCzzdpDCDCMJStbTbQWUrpv1iy0MCrvZVBCRg7xrXNXEurakVaKuykac8JyxBzUS/s3QDIJP+g==}
     engines: {node: '>=22'}
     peerDependencies:
       ws: ^8.21.0
@@ -61,14 +61,14 @@ packages:
       ws:
         optional: true
 
-  '@ai-sdk/provider-utils@5.0.0-beta.49':
-    resolution: {integrity: sha512-7xnpAQLpW0KGIsh0CQERcIZuXEGqv7FtFW2BdFk14iuMxRMVpXhTVvEQyqkm6tWAbQ7OsGQJhO6M0Me9gHQ52g==}
+  '@ai-sdk/provider-utils@5.0.0':
+    resolution: {integrity: sha512-zj66M02jc6ASYwIgWZowsooDUwaVngeNZQ3H10GwcPMZ+KR6gHMhcUuKl6tkai+JPXTKDyHY1pnszuxRtw2D4A==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider@4.0.0-beta.19':
-    resolution: {integrity: sha512-Aca/KiGeRtMM7rOJ38Qio+Dc2V45PpiGoWgdrdtIkgM9zkhYpS043t0ggKoNOWgm/csv99XWGrfSF63PSkVeHw==}
+  '@ai-sdk/provider@4.0.0':
+    resolution: {integrity: sha512-fr9Gs89prDWiuox/T+kCA+i2cJkHpxU5S+tr4megjTzRC27ZsvFhwjU/+XrqqMbvBUlfmXxTOYWy8ng45dsjIg==}
     engines: {node: '>=22'}
 
   '@babel/runtime@7.29.7':
@@ -801,8 +801,8 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  ai@7.0.0-beta.183:
-    resolution: {integrity: sha512-SPa4Q1waZ+MKQrnRY79F02wEzeo8kH6U1rRgs0tiBnNejprv0L+qoCFXeQSPqdog9TwkCytjY8QF8ujFz9CQnA==}
+  ai@7.0.0:
+    resolution: {integrity: sha512-hncs+jamJh8r36K6G8xky7oF4Ai/RLU5TF85FMzI2vElyMJGGnLoHihpdmuDiuY2BsktDWHevKaJM1l0VcRLGw==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -1633,42 +1633,42 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/gateway@4.0.0-beta.111(zod@3.25.76)':
+  '@ai-sdk/gateway@4.0.0(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 4.0.0-beta.19
-      '@ai-sdk/provider-utils': 5.0.0-beta.49(zod@3.25.76)
+      '@ai-sdk/provider': 4.0.0
+      '@ai-sdk/provider-utils': 5.0.0(zod@3.25.76)
       '@vercel/oidc': 3.2.0
       zod: 3.25.76
 
-  '@ai-sdk/harness-claude-code@1.0.0-beta.18':
+  '@ai-sdk/harness-claude-code@1.0.0':
     dependencies:
-      '@ai-sdk/harness': 1.0.0-beta.21(ws@8.21.0)(zod@3.25.76)
-      '@ai-sdk/provider-utils': 5.0.0-beta.49(zod@3.25.76)
+      '@ai-sdk/harness': 1.0.0(ws@8.21.0)(zod@3.25.76)
+      '@ai-sdk/provider-utils': 5.0.0(zod@3.25.76)
       ws: 8.21.0
       zod: 3.25.76
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@ai-sdk/harness@1.0.0-beta.21(ws@8.21.0)(zod@3.25.76)':
+  '@ai-sdk/harness@1.0.0(ws@8.21.0)(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 4.0.0-beta.19
-      '@ai-sdk/provider-utils': 5.0.0-beta.49(zod@3.25.76)
-      ai: 7.0.0-beta.183(zod@3.25.76)
+      '@ai-sdk/provider': 4.0.0
+      '@ai-sdk/provider-utils': 5.0.0(zod@3.25.76)
+      ai: 7.0.0(zod@3.25.76)
     optionalDependencies:
       ws: 8.21.0
     transitivePeerDependencies:
       - zod
 
-  '@ai-sdk/provider-utils@5.0.0-beta.49(zod@3.25.76)':
+  '@ai-sdk/provider-utils@5.0.0(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 4.0.0-beta.19
+      '@ai-sdk/provider': 4.0.0
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.1.0
       zod: 3.25.76
 
-  '@ai-sdk/provider@4.0.0-beta.19':
+  '@ai-sdk/provider@4.0.0':
     dependencies:
       json-schema: 0.4.0
 
@@ -2259,11 +2259,11 @@ snapshots:
 
   acorn@8.17.0: {}
 
-  ai@7.0.0-beta.183(zod@3.25.76):
+  ai@7.0.0(zod@3.25.76):
     dependencies:
-      '@ai-sdk/gateway': 4.0.0-beta.111(zod@3.25.76)
-      '@ai-sdk/provider': 4.0.0-beta.19
-      '@ai-sdk/provider-utils': 5.0.0-beta.49(zod@3.25.76)
+      '@ai-sdk/gateway': 4.0.0(zod@3.25.76)
+      '@ai-sdk/provider': 4.0.0
+      '@ai-sdk/provider-utils': 5.0.0(zod@3.25.76)
       zod: 3.25.76
 
   ansi-colors@4.1.3: {}
