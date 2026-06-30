@@ -1,45 +1,20 @@
 name: Release
 
-# Manual, dispatch-driven release modeled on the e2b-dev/E2B SDK workflow.
-#   - release   : version + publish to npm @latest from pending changesets
-#   - candidate : publish a prerelease under a dist-tag (rc/beta/snapshot)
+# Manual, dispatch-driven release modeled on the e2b-dev/E2B SDK workflow:
+# preflight gates on pending changesets, tests run, then changesets versions
+# and publishes to npm @latest.
 on:
-  workflow_dispatch:
-    inputs:
-      mode:
-        description: "Release mode"
-        type: choice
-        options:
-          - release
-          - candidate
-        default: release
-      tag:
-        description: "Dist-tag for candidate (e.g. rc, beta, snapshot)"
-        required: false
-        default: "rc"
-        type: string
-      preid:
-        description: "Prerelease identifier (defaults to branch name, candidate only)"
-        required: false
-        default: ""
-        type: string
-      skip-tests:
-        description: "Skip tests (candidate only)"
-        required: false
-        default: false
-        type: boolean
+  workflow_dispatch: {}
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}
+concurrency: release-${{ github.ref }}
 
 permissions:
   contents: write # commit the version bump / create the GitHub release
   id-token: write # npm trusted publishing (provenance)
 
 jobs:
-  # ── Production release ───────────────────────────────────
   preflight:
     name: Release preflight
-    if: github.event.inputs.mode != 'candidate'
     runs-on: ubuntu-latest
     outputs:
       release: ${{ steps.version.outputs.release }}
@@ -114,57 +89,3 @@ jobs:
           git push || echo "::warning::Could not push the version bump (branch protection?). Reconcile manually."
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-
-  # ── Release candidate ────────────────────────────────────
-  candidate:
-    name: Publish candidate
-    if: github.event.inputs.mode == 'candidate'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: ".tool-versions"
-          registry-url: "https://registry.npmjs.org"
-          cache: pnpm
-
-      - name: Update npm (required for trusted publishing)
-        run: npm install -g npm@^11.6
-
-      - name: Configure pnpm
-        run: pnpm config set auto-install-peers true
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Run tests
-        if: github.event.inputs.skip-tests != 'true'
-        run: |
-          pnpm run type-check
-          pnpm test
-
-      - name: Sanitize tag & preid
-        id: rc
-        env:
-          RAW_TAG: ${{ github.event.inputs.tag }}
-          RAW_PREID: ${{ github.event.inputs.preid || github.ref_name }}
-        run: |
-          SAFE_TAG="$(echo "$RAW_TAG" | sed 's/[^0-9A-Za-z-]/-/g')"
-          if [ "$SAFE_TAG" = "latest" ]; then
-            echo "::error::Publishing candidates with the 'latest' tag is not allowed. Use release mode."
-            exit 1
-          fi
-          echo "tag=$SAFE_TAG" >> "$GITHUB_OUTPUT"
-          echo "preid=$(echo "$RAW_PREID" | sed 's/[^0-9A-Za-z-]/-/g')" >> "$GITHUB_OUTPUT"
-
-      - name: Publish candidate to npm
-        env:
-          RC_PREID: ${{ steps.rc.outputs.preid }}
-          RC_TAG: ${{ steps.rc.outputs.tag }}
-          NPM_CONFIG_PROVENANCE: "true"
-        run: |
-          pnpm run build
-          npm version prerelease --preid="${RC_PREID}.${{ github.run_number }}" --no-git-tag-version
-          npm publish --tag "$RC_TAG" --provenance
