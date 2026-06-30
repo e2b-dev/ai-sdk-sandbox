@@ -87,7 +87,7 @@ await sandboxSession.setNetworkPolicy?.({
 const agent = new HarnessAgent({
   harness: createClaudeCode(),
   sandbox: createE2BSandbox({
-    template: 'claude-code-harness', // base image + pnpm + 2GB, built via build-template.ts
+    template: 'pnpm-base', // base image + pnpm + 2GB, built via build-template.ts
     ports: [4000],
   }),
 });

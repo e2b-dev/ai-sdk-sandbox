@@ -11,7 +11,7 @@
  * pulls claude-code's ~238MB native binary, and pnpm staging it peaks ~1.5GB, so
  * the sandbox needs ~2GB RAM and pnpm. E2B RAM is fixed at template-build time
  * (not per sandbox), so use a 2GB template with pnpm baked in: build
- * `claude-code-harness` once with build-template.ts. Override via E2B_TEMPLATE.
+ * `pnpm-base` once with build-template.ts. Override via E2B_TEMPLATE.
  *
  * Run: E2B_API_KEY=... ANTHROPIC_API_KEY=... npx tsx --env-file-if-exists=.env examples/harness.ts
  */
@@ -28,7 +28,7 @@ const agent = new HarnessAgent({
   }),
   sandbox: createE2BSandbox({
     // Built by build-template.ts (base image + pnpm + 2GB RAM).
-    template: process.env.E2B_TEMPLATE ?? 'claude-code-harness',
+    template: process.env.E2B_TEMPLATE ?? 'pnpm-base',
     ports: [4000], // bridge port — the adapter binds to ports[0]
     timeoutMs: 30 * 60 * 1000,
   }),
