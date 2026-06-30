@@ -1,6 +1,6 @@
 # AI SDK - E2B Sandbox
 
-_This package is **experimental** and tracks the AI SDK 7 beta._
+*This package is **experimental** and tracks the AI SDK 7 beta.*
 
 Run your agent's code inside [E2B](https://e2b.dev) sandboxes from the [AI SDK](https://ai-sdk.dev). It's the E2B counterpart to [@ai-sdk/sandbox-vercel](https://github.com/vercel/ai/tree/main/packages/sandbox-vercel). Drop it into a `HarnessAgent`, or hand a session straight to your AI SDK tools.
 
@@ -51,12 +51,14 @@ const e2bSandbox = createE2BSandbox({
 });
 ```
 
-Any of E2B's [`SandboxOpts`](https://e2b.dev/docs) (`template`, `envs`, `metadata`, `network`, and so on) are forwarded straight through. The provider adds two more options that aren't part of E2B's SDK:
+Any of E2B's `[SandboxOpts](https://e2b.dev/docs)` (`template`, `envs`, `metadata`, `network`, and so on) are forwarded straight through. The provider adds two more options that aren't part of E2B's SDK:
 
-| option | default | what it does |
-| --- | --- | --- |
-| `ports` | `[]` | Ports to advertise on `session.ports`. The harness bridge binds to the first one. E2B can reach any listening port through `getHost`, so this is really just the list it advertises. |
-| `setupCommands` | `[]` | Commands to run once on a fresh sandbox, before the harness bootstraps. For example, `['sudo npm install -g pnpm@9']` to add pnpm for the claude-code/codex adapters. |
+
+| option          | default | what it does                                                                                                                                                                         |
+| --------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ports`         | `[]`    | Ports to advertise on `session.ports`. The harness bridge binds to the first one. E2B can reach any listening port through `getHost`, so this is really just the list it advertises. |
+| `setupCommands` | `[]`    | Commands to run once on a fresh sandbox, before the harness bootstraps. For example, `['sudo npm install -g pnpm@9']` to add pnpm for the claude-code/codex adapters.                |
+
 
 Already have a sandbox? Pass it as `sandbox` to reuse it (handy when you want to share one across sessions). The provider won't touch its lifecycle, so `stop()` and `destroy()` become no-ops and cleanup stays yours.
 
@@ -93,7 +95,7 @@ const agent = new HarnessAgent({
 });
 ```
 
-One thing to know about templates: the claude-code adapter installs its own pinned CLI and bridge inside the sandbox with pnpm (it doesn't use a system `claude`). That install pulls claude-code's ~238 MB native binary, and pnpm staging it peaks around 1.5 GB — so the sandbox needs pnpm **and** ~2 GB of RAM. E2B RAM is fixed at template-build time (you can't set it per sandbox), so build a 2 GB template with pnpm baked in via `examples/build-template.ts` and pass its name. (For comparison, `@ai-sdk/sandbox-vercel` doesn't need this because Vercel sandboxes default to ~4 GB.) A full, runnable version lives in `examples/harness.ts`.
+One thing to know about templates: the claude-code adapter installs its own pinned CLI and bridge inside the sandbox with pnpm (it doesn't use a system `claude`). That install pulls claude-code's ~238 MB native binary, and pnpm staging it peaks around 1.5 GB — so the sandbox needs pnpm **and** ~2 GB of RAM. E2B RAM is fixed at template-build time (you can't set it per sandbox), so build a 2 GB template with pnpm baked in via `examples/build-template.ts` and pass its name. A full, runnable version lives in `examples/harness.ts`.
 
 ## Good to know
 
