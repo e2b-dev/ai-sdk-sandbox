@@ -22,7 +22,7 @@ const pnpmTemplate = Template()
 
 const info = await Template.build(pnpmTemplate, 'pnpm-base', {
   cpuCount: 2,
-  memoryMB: 2048, // claude-code's in-sandbox install peaks ~1.5GB; 1GB OOMs
+  memoryMB: 2048,
   onBuildLogs: defaultBuildLogger(),
 });
 console.log(`\n✅ Built template "${info.name}"`);
