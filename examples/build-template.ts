@@ -4,7 +4,7 @@
  *
  * Run once: E2B_API_KEY=... npx tsx --env-file-if-exists=.env examples/build-template.ts
  */
-import { Template } from 'e2b';
+import { Template, defaultBuildLogger } from 'e2b';
 
 // A claude-code harness template: E2B's base image with pnpm@9 baked in, sized
 // at 2GB. On first boot the adapter installs its own pinned claude-code CLI +
@@ -13,16 +13,16 @@ import { Template } from 'e2b';
 // template-build time (not per sandbox), so this template bakes in both pnpm
 // (skips a per-session install) and 2GB of memory. (No need to bake claude itself — the adapter installs its
 // pinned version regardless of any system `claude`.)
-const claudeCode = Template()
+const pnpmTemplate = Template()
   .fromBaseImage()
   // base runs as the non-root `user`; a global npm install needs root.
   .runCmd('npm install -g pnpm@9', { user: 'root' })
   .runCmd('pnpm --version');
 
-const info = await Template.build(claudeCode, 'claude-code-harness', {
+const info = await Template.build(pnpmTemplate, 'claude-code-harness', {
   cpuCount: 2,
   memoryMB: 2048, // claude-code's in-sandbox install peaks ~1.5GB; 1GB OOMs
-  onBuildLogs: log => process.stdout.write(String(log) + '\n'),
+  onBuildLogs: defaultBuildLogger(),
 });
 console.log(`\n✅ Built template "${info.name}"`);
 
