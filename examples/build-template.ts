@@ -6,14 +6,7 @@
  */
 import { Template, defaultBuildLogger } from 'e2b';
 
-// A pnpm base template: E2B's base image with pnpm@9 baked in, sized at 2GB. It
-// deliberately does NOT install claude-code. On first boot the claude-code
-// adapter installs its own pinned CLI + bridge in-sandbox via pnpm; that pulls
-// claude-code's ~238MB native binary, and pnpm staging it peaks ~1.5GB, so the
-// sandbox needs ~2GB. E2B RAM is fixed at template-build time (not per sandbox),
-// so this template bakes in both pnpm (skips a per-session install) and 2GB of
-// memory. (No need to bake claude itself — the adapter installs its pinned
-// version regardless of any system `claude`.)
+// A pnpm base template: E2B's base image with pnpm@9 baked in, sized at 2GB.
 const pnpmTemplate = Template()
   .fromBaseImage()
   // base runs as the non-root `user`; a global npm install needs root.
