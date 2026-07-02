@@ -1,0 +1,63 @@
+{
+  "name": "@e2b/ai-sdk-sandbox",
+  "version": "0.1.0",
+  "description": "E2B sandbox provider for the Vercel AI SDK",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "src",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "type-check": "tsc --noEmit",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "version": "changeset version",
+    "publish": "pnpm run build && changeset publish",
+    "example:basic": "tsx --env-file-if-exists=.env examples/basic.ts",
+    "example:harness": "tsx --env-file-if-exists=.env examples/harness.ts",
+    "example:resume": "tsx --env-file-if-exists=.env examples/resume.ts"
+  },
+  "keywords": [
+    "ai-sdk",
+    "e2b",
+    "sandbox",
+    "code-execution",
+    "harness"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@ai-sdk/harness": "^1.0.10",
+    "@ai-sdk/provider-utils": "^5.0.2",
+    "e2b": "^2.31.0"
+  },
+  "devDependencies": {
+    "@ai-sdk/harness-claude-code": "^1.0.10",
+    "@changesets/cli": "^2.27.0",
+    "@types/node": "^25.9.3",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@9.15.9"
+}

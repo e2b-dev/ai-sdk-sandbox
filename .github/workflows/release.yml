@@ -1,0 +1,91 @@
+name: Release
+
+# Manual, dispatch-driven release modeled on the e2b-dev/E2B SDK workflow:
+# preflight gates on pending changesets, tests run, then changesets versions
+# and publishes to npm @latest.
+on:
+  workflow_dispatch: {}
+
+concurrency: release-${{ github.ref }}
+
+permissions:
+  contents: write # commit the version bump / create the GitHub release
+  id-token: write # npm trusted publishing (provenance)
+
+jobs:
+  preflight:
+    name: Release preflight
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for pending changesets
+        id: version
+        run: echo "release=$(./.github/scripts/is_release.sh)" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Test
+    needs: [preflight]
+    if: needs.preflight.outputs.release == 'true'
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  publish:
+    name: Publish
+    needs: [preflight, test]
+    if: (!cancelled()) && !contains(needs.*.result, 'failure') && needs.preflight.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      # App token lets the version-bump commit push past branch protection on
+      # main (the default GITHUB_TOKEN can't). Same app the other e2b SDKs use.
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.VERSION_BUMPER_APPID }}
+          private-key: ${{ secrets.VERSION_BUMPER_SECRET }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - uses: pnpm/action-setup@v4 # reads packageManager from package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".tool-versions"
+          registry-url: "https://registry.npmjs.org"
+          cache: pnpm
+
+      - name: Update npm (required for trusted publishing)
+        run: npm install -g npm@^11.6
+
+      - name: Configure pnpm
+        run: pnpm config set auto-install-peers true
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Create new version
+        run: pnpm run version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to npm
+        uses: changesets/action@v1
+        with:
+          publish: pnpm run publish
+          createGithubReleases: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: "" # trusted publishing via OIDC, see changesets#1152
+          NPM_CONFIG_PROVENANCE: "true"
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "[skip ci] Release new version" || exit 0
+          git push || echo "::warning::Could not push the version bump (branch protection?). Reconcile manually."
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
