@@ -265,14 +265,11 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
   private async snapshotExists(name: string): Promise<boolean> {
     const conn = this.connectionOptions();
     // The `name` filter (e2b 2.34+) narrows the lookup server-side, so a single
-    // page replaces the old scan across every team snapshot. Still confirm an
-    // exact base-name match: the filter also matches ids and tag-qualified refs
-    // rather than only the bare name.
-    const items = await Sandbox.listSnapshots({
-      ...conn,
-      name,
-      limit: 100,
-    }).nextItems(conn);
+    // page replaces the old scan across every team snapshot. The paginator
+    // already carries `conn`, so `nextItems()` needs no arguments. Still confirm
+    // an exact base-name match: the filter also matches ids and tag-qualified
+    // refs rather than only the bare name.
+    const items = await Sandbox.listSnapshots({ ...conn, name }).nextItems();
     return items.some(
       info =>
         info.names?.some(n => snapshotBaseName(n) === name) ||
@@ -449,16 +446,18 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
 
     // E2B sandbox ids are server-assigned, so look the sandbox up by the
     // session id we tagged in metadata at create time (works cross-process).
+    // The paginator carries `conn`, so `nextItems` only needs the per-call signal.
     const conn = this.connectionOptions();
-    const [info] = await Sandbox.list({
+    const paginator = Sandbox.list({
       ...conn,
       query: {
         metadata: { [SESSION_METADATA_KEY]: options.sessionId },
         state: ['running', 'paused'],
       },
       limit: 1,
-    }).nextItems(
-      options.abortSignal ? { ...conn, signal: options.abortSignal } : conn,
+    });
+    const [info] = await paginator.nextItems(
+      options.abortSignal ? { signal: options.abortSignal } : undefined,
     );
     if (info == null) {
       throw new Error(
