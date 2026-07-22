@@ -125,15 +125,6 @@ export function snapshotName(identity: string): string {
   return `${SNAPSHOT_NAME_PREFIX}-${slug}-${hash}`;
 }
 
-/**
- * Strip the team namespace and tag from a snapshot ref to its bare name.
- * E2B returns names like `team-slug/ai-sdk-harness-x` and ids like
- * `team-slug/ai-sdk-harness-x:default`.
- */
-function snapshotBaseName(ref: string): string {
-  return (ref.split('/').pop() ?? ref).replace(/:[^/:]+$/, '');
-}
-
 function isWrapSettings(
   settings: E2BSandboxSettings,
 ): settings is { sandbox: Sandbox; bridgePorts?: ReadonlyArray<number> } {
@@ -264,17 +255,12 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
   /** Whether a snapshot with this bare name already exists (any process). */
   private async snapshotExists(name: string): Promise<boolean> {
     const conn = this.connectionOptions();
-    // The `name` filter (e2b 2.34+) narrows the lookup server-side, so a single
-    // page replaces the old scan across every team snapshot. The paginator
-    // already carries `conn`, so `nextItems()` needs no arguments. Still confirm
-    // an exact base-name match: the filter also matches ids and tag-qualified
-    // refs rather than only the bare name.
+    // The `name` filter (e2b 2.34+) matches this exact name server-side (an
+    // unknown name returns no items), so a non-empty first page means it exists
+    // — no client-side scan or re-match needed. The paginator already carries
+    // `conn`, so `nextItems()` needs no arguments.
     const items = await Sandbox.listSnapshots({ ...conn, name }).nextItems();
-    return items.some(
-      info =>
-        info.names?.some(n => snapshotBaseName(n) === name) ||
-        snapshotBaseName(info.snapshotId) === name,
-    );
+    return items.length > 0;
   }
 
   /**
