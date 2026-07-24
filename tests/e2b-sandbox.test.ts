@@ -327,6 +327,10 @@ describe('createE2BSandbox (per-identity snapshot reuse)', () => {
     }).createSession({ sessionId: 's1', identity: 'recipe-A', onFirstCreate: hook });
 
     const name = snapshotName('recipe-A');
+    // looked the snapshot up by name (server-side filter), not a full scan
+    expect(listSnapshotsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ name }),
+    );
     // ran setup + hook on the template sandbox, snapshotted it, killed it
     expect(template.spies.run).toHaveBeenCalledWith(
       'echo setup',

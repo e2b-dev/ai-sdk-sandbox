@@ -4,11 +4,24 @@ import type {
   HarnessV1SandboxProvider,
 } from '@ai-sdk/harness';
 import type { Experimental_SandboxSession as SandboxSession } from '@ai-sdk/provider-utils';
-import { Sandbox } from 'e2b';
+import { ConnectionConfig, Sandbox } from 'e2b';
 import type { SandboxOpts } from 'e2b';
+import packageJson from '../package.json' with { type: 'json' };
 import { E2BNetworkSandboxSession } from './e2b-network-sandbox-session';
 import { E2BSandboxSession } from './e2b-sandbox-session';
 import { withAbort } from './utils';
+
+/**
+ * Identify traffic from this provider to E2B for usage attribution. E2B appends
+ * this token to the `User-Agent` of every request (an explicit caller
+ * `User-Agent` still wins). The version is derived from `package.json` rather
+ * than hardcoded so it tracks releases automatically. The slug mirrors E2B's
+ * own de-scoped convention (`@e2b/code-interpreter` → `e2b-code-interpreter`).
+ *
+ * Set once at module load, before any `ConnectionConfig` is constructed —
+ * configs read the value at construction time.
+ */
+ConnectionConfig.setIntegration(`e2b-ai-sdk-sandbox/${packageJson.version}`);
 
 type OnFirstCreate = (
   session: SandboxSession,
@@ -87,7 +100,6 @@ const IDENTITY_METADATA_KEY = 'aiSdkIdentity';
 const DEFAULT_WORKING_DIRECTORY = '/home/user';
 
 const SNAPSHOT_NAME_PREFIX = 'ai-sdk-harness';
-const SNAPSHOT_LOOKUP_MAX_PAGES = 10;
 const SNAPSHOT_CACHE_KEY = Symbol.for('ai-sdk.harness.e2b-snapshot-names');
 type SnapshotNameCache = Map<string, Promise<string>>;
 
@@ -111,15 +123,6 @@ export function snapshotName(identity: string): string {
     .slice(0, 40);
   const hash = createHash('sha256').update(identity).digest('hex').slice(0, 12);
   return `${SNAPSHOT_NAME_PREFIX}-${slug}-${hash}`;
-}
-
-/**
- * Strip the team namespace and tag from a snapshot ref to its bare name.
- * E2B returns names like `team-slug/ai-sdk-harness-x` and ids like
- * `team-slug/ai-sdk-harness-x:default`.
- */
-function snapshotBaseName(ref: string): string {
-  return (ref.split('/').pop() ?? ref).replace(/:[^/:]+$/, '');
 }
 
 function isWrapSettings(
@@ -252,25 +255,12 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
   /** Whether a snapshot with this bare name already exists (any process). */
   private async snapshotExists(name: string): Promise<boolean> {
     const conn = this.connectionOptions();
-    const paginator = Sandbox.listSnapshots({ ...conn, limit: 100 });
-    // Page through snapshots and match by name. Past the cap we treat it as a
-    // miss and rebuild (bounded cost).
-    for (
-      let page = 0;
-      paginator.hasNext && page < SNAPSHOT_LOOKUP_MAX_PAGES;
-      page++
-    ) {
-      const items = await paginator.nextItems(conn);
-      for (const info of items) {
-        if (
-          info.names?.some(n => snapshotBaseName(n) === name) ||
-          snapshotBaseName(info.snapshotId) === name
-        ) {
-          return true;
-        }
-      }
-    }
-    return false;
+    // The `name` filter (e2b 2.34+) matches this exact name server-side (an
+    // unknown name returns no items), so a non-empty first page means it exists
+    // — no client-side scan or re-match needed. The paginator already carries
+    // `conn`, so `nextItems()` needs no arguments.
+    const items = await Sandbox.listSnapshots({ ...conn, name }).nextItems();
+    return items.length > 0;
   }
 
   /**
@@ -442,16 +432,18 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
 
     // E2B sandbox ids are server-assigned, so look the sandbox up by the
     // session id we tagged in metadata at create time (works cross-process).
+    // The paginator carries `conn`, so `nextItems` only needs the per-call signal.
     const conn = this.connectionOptions();
-    const [info] = await Sandbox.list({
+    const paginator = Sandbox.list({
       ...conn,
       query: {
         metadata: { [SESSION_METADATA_KEY]: options.sessionId },
         state: ['running', 'paused'],
       },
       limit: 1,
-    }).nextItems(
-      options.abortSignal ? { ...conn, signal: options.abortSignal } : conn,
+    });
+    const [info] = await paginator.nextItems(
+      options.abortSignal ? { signal: options.abortSignal } : undefined,
     );
     if (info == null) {
       throw new Error(
