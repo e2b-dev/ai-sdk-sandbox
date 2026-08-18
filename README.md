@@ -1,6 +1,6 @@
 # AI SDK - E2B Sandbox
 
-*This package is **experimental** and tracks the AI SDK 7 beta.*
+*This package is **experimental** and targets AI SDK 7 (now stable).*
 
 Run your agent's code inside [E2B](https://e2b.dev) sandboxes from the [AI SDK](https://ai-sdk.dev). It's the E2B counterpart to [@ai-sdk/sandbox-vercel](https://github.com/vercel/ai/tree/main/packages/sandbox-vercel). Drop it into a `HarnessAgent`, or hand a session straight to your AI SDK tools.
 
@@ -35,7 +35,7 @@ console.log(stdout); // "hi"
 await sandboxSession.stop();
 ```
 
-`restricted()` gives you an `Experimental_SandboxSession`: the **same underlying sandbox**, narrowed to the tool-facing surface (file I/O, `run`, `spawn`), just a view with the infra bits (`ports`, `getPortUrl`, `setNetworkPolicy`, `stop`) removed. That's the security boundary: code you hand the restricted view can't stop the box or change its network policy. Pass it to an AI SDK tool's `execute()` via `experimental_sandbox`; the full session stays with the harness. (See the [harness docs](https://ai-sdk.dev/v7/docs/ai-sdk-harnesses/overview) for the `restricted()` contract.)
+`restricted()` gives you an `Experimental_SandboxSession`: the **same underlying sandbox**, narrowed to the tool-facing surface (file I/O, `run`, `spawn`), just a view with the infra bits (`ports`, `getPortEndpoint`, `setNetworkPolicy`, `stop`) removed. That's the security boundary: code you hand the restricted view can't stop the box or change its network policy. Pass it to an AI SDK tool's `execute()` via `experimental_sandbox`; the full session stays with the harness. (See the [harness docs](https://ai-sdk.dev/v7/docs/ai-sdk-harnesses/overview) for the `restricted()` contract.)
 
 ### Settings
 
