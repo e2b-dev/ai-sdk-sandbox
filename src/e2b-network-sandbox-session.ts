@@ -126,7 +126,12 @@ export class E2BNetworkSandboxSession
   // replace-all updates, and state commits only after the update succeeds.
   private policyUpdate: SandboxNetworkUpdate | null = null;
   private transformations: HarnessV1RequestTransformation[] = [];
-  private baselinePromise: Promise<SandboxNetworkInfo | undefined> | null = null;
+  private baselinePromise: Promise<{
+    network: SandboxNetworkInfo | undefined;
+    // Top-level on SandboxInfo, not part of `network` — captured separately
+    // so a sandbox created with allowInternetAccess:false keeps it.
+    allowInternetAccess: boolean | undefined;
+  }> | null = null;
   private networkQueue: Promise<unknown> = Promise.resolve();
 
   private enqueueNetworkChange = <T>(task: () => Promise<T>): Promise<T> => {
@@ -138,11 +143,17 @@ export class E2BNetworkSandboxSession
     return run;
   };
 
-  private getBaseline = (): Promise<SandboxNetworkInfo | undefined> => {
+  private getBaseline = (): Promise<{
+    network: SandboxNetworkInfo | undefined;
+    allowInternetAccess: boolean | undefined;
+  }> => {
     // Fail the mutation rather than silently wiping creation-time egress
     // config; a rejected read is not cached so the next call retries.
     this.baselinePromise ??= this.sandbox.getInfo().then(
-      (info) => info.network,
+      (info) => ({
+        network: info.network,
+        allowInternetAccess: info.allowInternetAccess,
+      }),
       (error) => {
         this.baselinePromise = null;
         throw error;
@@ -161,11 +172,18 @@ export class E2BNetworkSandboxSession
     const update: SandboxNetworkUpdate = candidate.policy
       ? { ...candidate.policy }
       : {
-          ...(baseline?.allowOut ? { allowOut: [...baseline.allowOut] } : {}),
-          ...(baseline?.denyOut ? { denyOut: [...baseline.denyOut] } : {}),
+          ...(baseline.network?.allowOut
+            ? { allowOut: [...baseline.network.allowOut] }
+            : {}),
+          ...(baseline.network?.denyOut
+            ? { denyOut: [...baseline.network.denyOut] }
+            : {}),
+          ...(baseline.allowInternetAccess == null
+            ? {}
+            : { allowInternetAccess: baseline.allowInternetAccess }),
         };
     const rules: Record<string, SandboxNetworkRule[]> = {};
-    for (const [host, hostRules] of Object.entries(baseline?.rules ?? {})) {
+    for (const [host, hostRules] of Object.entries(baseline.network?.rules ?? {})) {
       rules[host] = hostRules.map((rule) =>
         rule.transform ? { transform: { headers: { ...rule.transform.headers } } } : {},
       );

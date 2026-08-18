@@ -391,6 +391,20 @@ describe('createE2BSandbox (wrap existing)', () => {
       ]);
     });
 
+    it('preserves creation-time allowInternetAccess:false on transformation-only updates', async () => {
+      const { sandbox, spies } = makeMockSandbox({
+        getInfo: vi.fn(async () => ({ allowInternetAccess: false, network: undefined })),
+      });
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.addRequestTransformations!([openaiAuth]);
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({
+        allowInternetAccess: false,
+        rules: {
+          'api.openai.com': [{ transform: { headers: { Authorization: 'Bearer sk-real' } } }],
+        },
+      });
+    });
+
     it('restricted() exposes no network mutation surface', async () => {
       const { sandbox } = makeMockSandbox();
       const session = await createE2BSandbox({ sandbox }).createSession();
