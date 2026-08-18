@@ -184,6 +184,103 @@ describe('createE2BSandbox (wrap existing)', () => {
     });
   });
 
+  describe('request transformations', () => {
+    const openaiAuth = {
+      match: { host: 'api.openai.com' },
+      transform: { headers: { Authorization: 'Bearer sk-real' } },
+    } as const;
+    const anthropicAuth = {
+      match: { host: 'api.anthropic.com' },
+      transform: { headers: { 'x-api-key': 'sk-ant-real' } },
+    } as const;
+
+    it('set maps transformations to per-host rules', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.setRequestTransformations!([openaiAuth, anthropicAuth]);
+      expect(spies.updateNetwork).toHaveBeenCalledWith({
+        rules: {
+          'api.openai.com': [{ transform: { headers: { Authorization: 'Bearer sk-real' } } }],
+          'api.anthropic.com': [{ transform: { headers: { 'x-api-key': 'sk-ant-real' } } }],
+        },
+      });
+    });
+
+    it('groups multiple transformations for one host into an ordered rule list', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      const extra = {
+        match: { host: 'api.openai.com' },
+        transform: { headers: { 'x-extra': 'v' } },
+      } as const;
+      await session.setRequestTransformations!([openaiAuth, extra]);
+      expect(spies.updateNetwork).toHaveBeenCalledWith({
+        rules: {
+          'api.openai.com': [
+            { transform: { headers: { Authorization: 'Bearer sk-real' } } },
+            { transform: { headers: { 'x-extra': 'v' } } },
+          ],
+        },
+      });
+    });
+
+    it('add appends to previously managed transformations', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.addRequestTransformations!([openaiAuth]);
+      await session.addRequestTransformations!([anthropicAuth]);
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({
+        rules: {
+          'api.openai.com': [{ transform: { headers: { Authorization: 'Bearer sk-real' } } }],
+          'api.anthropic.com': [{ transform: { headers: { 'x-api-key': 'sk-ant-real' } } }],
+        },
+      });
+    });
+
+    it('set replaces what add accumulated', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.addRequestTransformations!([openaiAuth]);
+      await session.setRequestTransformations!([anthropicAuth]);
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({
+        rules: {
+          'api.anthropic.com': [{ transform: { headers: { 'x-api-key': 'sk-ant-real' } } }],
+        },
+      });
+    });
+
+    it('setting an empty list clears the rules from the payload', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.addRequestTransformations!([openaiAuth]);
+      await session.setRequestTransformations!([]);
+      // E2B's update replaces egress config atomically, so omitting `rules`
+      // clears them server-side.
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({});
+    });
+
+    it('merges with the network policy so neither clears the other', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.setNetworkPolicy!({ mode: 'allow-all' });
+      await session.addRequestTransformations!([openaiAuth]);
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({
+        allowInternetAccess: true,
+        rules: {
+          'api.openai.com': [{ transform: { headers: { Authorization: 'Bearer sk-real' } } }],
+        },
+      });
+      // and the other order: a policy change keeps the managed rules
+      await session.setNetworkPolicy!({ mode: 'deny-all' });
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({
+        allowInternetAccess: false,
+        rules: {
+          'api.openai.com': [{ transform: { headers: { Authorization: 'Bearer sk-real' } } }],
+        },
+      });
+    });
+  });
+
   describe('setPorts', () => {
     it('replaces the advertised port list', async () => {
       const { sandbox } = makeMockSandbox();

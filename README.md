@@ -83,6 +83,32 @@ await sandboxSession.setNetworkPolicy?.({
 });
 ```
 
+### Credential brokering (request transformations)
+
+The session implements the harness's `setRequestTransformations` /
+`addRequestTransformations` on top of E2B's egress rules: headers in
+`transform.headers` are injected by E2B's proxy **after the request leaves
+the sandbox**, so real credentials never enter the sandbox — code inside
+only ever sees a placeholder. Harness adapters use this automatically for
+their model API keys when available (you'll no longer see the
+"falling back to credential forwarding" warning).
+
+```ts
+await sandboxSession.addRequestTransformations?.([
+  {
+    match: { host: 'api.example.com' },
+    transform: { headers: { Authorization: `Bearer ${realKey}` } },
+  },
+]);
+```
+
+Two E2B-specific caveats: rules match by host only (harness `match`
+refinements like `path` or `method` are applied host-wide), and a rules
+entry doesn't allow egress by itself — under an allow-list policy the host
+must also be reachable. The session merges the policy and the
+transformation rules into every network update, since E2B replaces egress
+config atomically.
+
 ### Running an agent (Claude Code, Codex)
 
 ```ts
