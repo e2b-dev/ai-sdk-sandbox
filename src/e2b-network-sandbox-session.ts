@@ -99,7 +99,7 @@ export class E2BNetworkSandboxSession
   setRequestTransformations = async (
     transformations: ReadonlyArray<HarnessV1RequestTransformation>,
   ): Promise<void> => {
-    const next = toManagedTransformations(transformations);
+    const next = validateAndCopyTransformations(transformations);
     await this.enqueueNetworkChange(() =>
       this.pushNetwork({ policy: this.policyUpdate, transformations: next }),
     );
@@ -109,7 +109,7 @@ export class E2BNetworkSandboxSession
   addRequestTransformations = async (
     transformations: ReadonlyArray<HarnessV1RequestTransformation>,
   ): Promise<void> => {
-    const added = toManagedTransformations(transformations);
+    const added = validateAndCopyTransformations(transformations);
     await this.enqueueNetworkChange(() =>
       this.pushNetwork({
         policy: this.policyUpdate,
@@ -239,7 +239,7 @@ export class E2BNetworkSandboxSession
  * allow egress by itself: under an allow-list policy the host must also be
  * reachable.
  */
-export function toManagedTransformations(
+export function validateAndCopyTransformations(
   transformations: ReadonlyArray<HarnessV1RequestTransformation>,
 ): HarnessV1RequestTransformation[] {
   return transformations.map((transformation) => {
