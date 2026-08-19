@@ -2,6 +2,7 @@ import {
   HarnessCapabilityUnsupportedError,
   type HarnessV1NetworkPolicy,
   type HarnessV1NetworkSandboxSession,
+  type HarnessV1PortEndpoint,
 } from '@ai-sdk/harness';
 import type { Experimental_SandboxSession as SandboxSession } from '@ai-sdk/provider-utils';
 import { ALL_TRAFFIC } from 'e2b';
@@ -55,6 +56,16 @@ export class E2BNetworkSandboxSession
     return new E2BSandboxSession(this.sandbox);
   }
 
+  getPortEndpoint = async (options: {
+    port: number;
+    protocol?: 'http' | 'https' | 'ws';
+  }): Promise<HarnessV1PortEndpoint> => {
+    // E2B port URLs are public and carry auth in the URL itself, so the
+    // endpoint needs no extra headers.
+    return { url: await this.getPortUrl(options) };
+  };
+
+  /** @deprecated Use `getPortEndpoint` instead. */
   getPortUrl = async (options: {
     port: number;
     protocol?: 'http' | 'https' | 'ws';

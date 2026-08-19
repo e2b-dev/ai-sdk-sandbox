@@ -43,12 +43,12 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@ai-sdk/harness": "^1.0.39",
-    "@ai-sdk/provider-utils": "^5.0.12",
-    "e2b": "^2.35.0"
+    "@ai-sdk/harness": "^1.0.73",
+    "@ai-sdk/provider-utils": "^5.0.27",
+    "e2b": "^2.39.0"
   },
   "devDependencies": {
-    "@ai-sdk/harness-claude-code": "^1.0.40",
+    "@ai-sdk/harness-claude-code": "^1.0.76",
     "@changesets/cli": "^2.27.0",
     "@types/node": "^25.9.3",
     "tsup": "^8.0.0",
