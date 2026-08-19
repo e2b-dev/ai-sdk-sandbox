@@ -74,7 +74,7 @@ jobs:
       - name: Publish to npm
         uses: changesets/action@v1
         with:
-          publish: pnpm run publish
+          publish: pnpm run release
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
