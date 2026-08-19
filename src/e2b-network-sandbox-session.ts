@@ -3,10 +3,16 @@ import {
   type HarnessV1NetworkPolicy,
   type HarnessV1NetworkSandboxSession,
   type HarnessV1PortEndpoint,
+  type HarnessV1RequestTransformation,
 } from '@ai-sdk/harness';
 import type { Experimental_SandboxSession as SandboxSession } from '@ai-sdk/provider-utils';
 import { ALL_TRAFFIC } from 'e2b';
-import type { Sandbox, SandboxNetworkUpdate } from 'e2b';
+import type {
+  Sandbox,
+  SandboxNetworkInfo,
+  SandboxNetworkRule,
+  SandboxNetworkUpdate,
+} from 'e2b';
 import { E2BSandboxSession } from './e2b-sandbox-session';
 
 const E2B_PROVIDER_ID = 'e2b-sandbox';
@@ -79,7 +85,118 @@ export class E2BNetworkSandboxSession
   };
 
   setNetworkPolicy = async (policy: HarnessV1NetworkPolicy): Promise<void> => {
-    await this.sandbox.updateNetwork(toE2BNetworkUpdate(policy));
+    const policyUpdate = toE2BNetworkUpdate(policy);
+    await this.enqueueNetworkChange(() =>
+      this.pushNetwork({ policy: policyUpdate, transformations: this.transformations }),
+    );
+  };
+
+  /**
+   * Replace the transformation rules this session manages. Credentials in
+   * `transform.headers` are injected by E2B's egress proxy after the request
+   * leaves the sandbox — the values never enter the sandbox itself.
+   */
+  setRequestTransformations = async (
+    transformations: ReadonlyArray<HarnessV1RequestTransformation>,
+  ): Promise<void> => {
+    const next = validateAndCopyTransformations(transformations);
+    await this.enqueueNetworkChange(() =>
+      this.pushNetwork({ policy: this.policyUpdate, transformations: next }),
+    );
+  };
+
+  /** Add transformation rules without replacing the ones already managed. */
+  addRequestTransformations = async (
+    transformations: ReadonlyArray<HarnessV1RequestTransformation>,
+  ): Promise<void> => {
+    const added = validateAndCopyTransformations(transformations);
+    await this.enqueueNetworkChange(() =>
+      this.pushNetwork({
+        policy: this.policyUpdate,
+        transformations: [...this.transformations, ...added],
+      }),
+    );
+  };
+
+  // E2B's network update replaces all egress config atomically (omitted
+  // fields are cleared on the server), so every change sends a merged payload:
+  // the creation-time baseline (captured lazily from getInfo() before the
+  // first mutation), the last policy set through this session, and the
+  // session-managed transformation rules. A per-session queue serializes the
+  // replace-all updates, and state commits only after the update succeeds.
+  private policyUpdate: SandboxNetworkUpdate | null = null;
+  private transformations: HarnessV1RequestTransformation[] = [];
+  private baselinePromise: Promise<{
+    network: SandboxNetworkInfo | undefined;
+    // Top-level on SandboxInfo, not part of `network` — captured separately
+    // so a sandbox created with allowInternetAccess:false keeps it.
+    allowInternetAccess: boolean | undefined;
+  }> | null = null;
+  private networkQueue: Promise<unknown> = Promise.resolve();
+
+  private enqueueNetworkChange = <T>(task: () => Promise<T>): Promise<T> => {
+    const run = this.networkQueue.then(task, task);
+    this.networkQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  };
+
+  private getBaseline = (): Promise<{
+    network: SandboxNetworkInfo | undefined;
+    allowInternetAccess: boolean | undefined;
+  }> => {
+    // Fail the mutation rather than silently wiping creation-time egress
+    // config; a rejected read is not cached so the next call retries.
+    this.baselinePromise ??= this.sandbox.getInfo().then(
+      (info) => ({
+        network: info.network,
+        allowInternetAccess: info.allowInternetAccess,
+      }),
+      (error) => {
+        this.baselinePromise = null;
+        throw error;
+      },
+    );
+    return this.baselinePromise;
+  };
+
+  private pushNetwork = async (candidate: {
+    policy: SandboxNetworkUpdate | null;
+    transformations: HarnessV1RequestTransformation[];
+  }): Promise<void> => {
+    const baseline = await this.getBaseline();
+    // A policy set through this session is a complete egress statement and
+    // replaces the baseline allow/deny lists; baseline rules always persist.
+    const update: SandboxNetworkUpdate = candidate.policy
+      ? { ...candidate.policy }
+      : {
+          ...(baseline.network?.allowOut
+            ? { allowOut: [...baseline.network.allowOut] }
+            : {}),
+          ...(baseline.network?.denyOut
+            ? { denyOut: [...baseline.network.denyOut] }
+            : {}),
+          ...(baseline.allowInternetAccess == null
+            ? {}
+            : { allowInternetAccess: baseline.allowInternetAccess }),
+        };
+    const rules: Record<string, SandboxNetworkRule[]> = {};
+    for (const [host, hostRules] of Object.entries(baseline.network?.rules ?? {})) {
+      rules[host] = hostRules.map((rule) =>
+        rule.transform ? { transform: { headers: { ...rule.transform.headers } } } : {},
+      );
+    }
+    for (const transformation of candidate.transformations) {
+      (rules[transformation.match.host] ??= []).push({
+        transform: { headers: { ...transformation.transform.headers } },
+      });
+    }
+    if (Object.keys(rules).length > 0) update.rules = rules;
+    await this.sandbox.updateNetwork(update);
+    this.policyUpdate = candidate.policy;
+    this.transformations = candidate.transformations;
   };
 
   // E2B reaches any listening port via getHost(), so "exposing" a port is just
@@ -108,6 +225,37 @@ export class E2BNetworkSandboxSession
     await this.sandbox.kill();
     this.destroyed = true;
   };
+}
+
+/**
+ * Validate and defensively copy harness request transformations for
+ * session-managed state.
+ *
+ * E2B's egress proxy matches rules by host only. A `path` matcher (what
+ * harness adapters generate for API base URLs) is accepted and applied
+ * host-wide — the injected headers still only ever go to the matched host.
+ * `method`, `queryString`, and `headers` matchers cannot be enforced and are
+ * rejected rather than silently widened. Note that a rules entry does not
+ * allow egress by itself: under an allow-list policy the host must also be
+ * reachable.
+ */
+export function validateAndCopyTransformations(
+  transformations: ReadonlyArray<HarnessV1RequestTransformation>,
+): HarnessV1RequestTransformation[] {
+  return transformations.map((transformation) => {
+    const { host, path, method, queryString, headers } = transformation.match;
+    if (method != null || queryString != null || headers != null) {
+      throw new HarnessCapabilityUnsupportedError({
+        harnessId: E2B_PROVIDER_ID,
+        message:
+          'E2B egress rules match requests by host (a path matcher is applied host-wide); method, queryString, and headers matchers are not supported.',
+      });
+    }
+    return {
+      match: { host, ...(path == null ? {} : { path: structuredClone(path) }) },
+      transform: { headers: { ...transformation.transform.headers } },
+    };
+  });
 }
 
 /** Map the harness network policy onto an E2B network update. */

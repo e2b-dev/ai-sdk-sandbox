@@ -83,6 +83,17 @@ await sandboxSession.setNetworkPolicy?.({
 });
 ```
 
+### Request transformations and credential brokering
+
+`setRequestTransformations()` replaces the managed rules,
+`addRequestTransformations()` adds without replacing. Headers in
+`transform.headers` are injected by E2B's egress proxy after the request
+leaves the sandbox, so real credentials never enter it — harness adapters
+use this automatically for their model API keys. E2B matches rules by host:
+a `path` matcher is applied host-wide, and `method`/`queryString`/`headers`
+matchers are rejected rather than silently widened. Network policies remain
+authoritative over which hosts can be reached.
+
 ### Running an agent (Claude Code, Codex)
 
 ```ts

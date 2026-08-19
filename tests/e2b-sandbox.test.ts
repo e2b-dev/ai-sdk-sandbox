@@ -51,6 +51,7 @@ function makeMockSandbox(overrides: Record<string, unknown> = {}) {
   );
   const getHost = vi.fn((port: number) => `${port}-sbx.e2b.app`);
   const updateNetwork = vi.fn(async () => {});
+  const getInfo = vi.fn(async () => ({ network: undefined }));
   const pause = vi.fn(async () => true);
   const kill = vi.fn(async () => {});
   const createSnapshot = vi.fn(async ({ name }: { name: string }) => ({
@@ -63,12 +64,16 @@ function makeMockSandbox(overrides: Record<string, unknown> = {}) {
     files: { read: vi.fn(), write: vi.fn() },
     getHost,
     updateNetwork,
+    getInfo,
     pause,
     kill,
     createSnapshot,
     ...overrides,
   } as unknown as Sandbox;
-  return { sandbox, spies: { run, getHost, updateNetwork, pause, kill, createSnapshot } };
+  return {
+    sandbox,
+    spies: { run, getHost, updateNetwork, getInfo, pause, kill, createSnapshot },
+  };
 }
 
 /** A one-page listSnapshots paginator over the given SnapshotInfo-ish items. */
@@ -181,6 +186,253 @@ describe('createE2BSandbox (wrap existing)', () => {
       await expect(
         session.setNetworkPolicy!({ mode: 'custom' } as never),
       ).rejects.toThrow();
+    });
+  });
+
+  describe('request transformations', () => {
+    const openaiAuth = {
+      match: { host: 'api.openai.com' },
+      transform: { headers: { Authorization: 'Bearer sk-real' } },
+    } as const;
+    const anthropicAuth = {
+      match: { host: 'api.anthropic.com' },
+      transform: { headers: { 'x-api-key': 'sk-ant-real' } },
+    } as const;
+
+    it('set maps transformations to per-host rules', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.setRequestTransformations!([openaiAuth, anthropicAuth]);
+      expect(spies.updateNetwork).toHaveBeenCalledWith({
+        rules: {
+          'api.openai.com': [{ transform: { headers: { Authorization: 'Bearer sk-real' } } }],
+          'api.anthropic.com': [{ transform: { headers: { 'x-api-key': 'sk-ant-real' } } }],
+        },
+      });
+    });
+
+    it('groups multiple transformations for one host into an ordered rule list', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      const extra = {
+        match: { host: 'api.openai.com' },
+        transform: { headers: { 'x-extra': 'v' } },
+      } as const;
+      await session.setRequestTransformations!([openaiAuth, extra]);
+      expect(spies.updateNetwork).toHaveBeenCalledWith({
+        rules: {
+          'api.openai.com': [
+            { transform: { headers: { Authorization: 'Bearer sk-real' } } },
+            { transform: { headers: { 'x-extra': 'v' } } },
+          ],
+        },
+      });
+    });
+
+    it('add appends to previously managed transformations', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.addRequestTransformations!([openaiAuth]);
+      await session.addRequestTransformations!([anthropicAuth]);
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({
+        rules: {
+          'api.openai.com': [{ transform: { headers: { Authorization: 'Bearer sk-real' } } }],
+          'api.anthropic.com': [{ transform: { headers: { 'x-api-key': 'sk-ant-real' } } }],
+        },
+      });
+    });
+
+    it('set replaces what add accumulated', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.addRequestTransformations!([openaiAuth]);
+      await session.setRequestTransformations!([anthropicAuth]);
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({
+        rules: {
+          'api.anthropic.com': [{ transform: { headers: { 'x-api-key': 'sk-ant-real' } } }],
+        },
+      });
+    });
+
+    it('setting an empty list clears the rules from the payload', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.addRequestTransformations!([openaiAuth]);
+      await session.setRequestTransformations!([]);
+      // E2B's update replaces egress config atomically, so omitting `rules`
+      // clears them server-side.
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({});
+    });
+
+    it('preserves the sandbox baseline egress config in every update', async () => {
+      const { sandbox, spies } = makeMockSandbox({
+        getInfo: vi.fn(async () => ({
+          network: {
+            allowOut: ['api.internal.example'],
+            denyOut: ['0.0.0.0/0'],
+            rules: {
+              'api.internal.example': [{ transform: { headers: { 'x-base': 'kept' } } }],
+            },
+          },
+        })),
+      });
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.addRequestTransformations!([openaiAuth]);
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({
+        allowOut: ['api.internal.example'],
+        denyOut: ['0.0.0.0/0'],
+        rules: {
+          'api.internal.example': [{ transform: { headers: { 'x-base': 'kept' } } }],
+          'api.openai.com': [{ transform: { headers: { Authorization: 'Bearer sk-real' } } }],
+        },
+      });
+      // clearing managed transformations keeps the baseline rules
+      await session.setRequestTransformations!([]);
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({
+        allowOut: ['api.internal.example'],
+        denyOut: ['0.0.0.0/0'],
+        rules: {
+          'api.internal.example': [{ transform: { headers: { 'x-base': 'kept' } } }],
+        },
+      });
+    });
+
+    it('a session policy replaces baseline allow/deny but keeps baseline rules', async () => {
+      const { sandbox, spies } = makeMockSandbox({
+        getInfo: vi.fn(async () => ({
+          network: {
+            allowOut: ['api.internal.example'],
+            rules: {
+              'api.internal.example': [{ transform: { headers: { 'x-base': 'kept' } } }],
+            },
+          },
+        })),
+      });
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.setNetworkPolicy!({ mode: 'allow-all' });
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({
+        allowInternetAccess: true,
+        rules: {
+          'api.internal.example': [{ transform: { headers: { 'x-base': 'kept' } } }],
+        },
+      });
+    });
+
+    it('rejects transformations with matchers E2B cannot enforce', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await expect(
+        session.addRequestTransformations!([
+          {
+            match: { host: 'api.openai.com', method: ['POST'] },
+            transform: { headers: { Authorization: 'Bearer sk-real' } },
+          },
+        ]),
+      ).rejects.toThrow(/host/);
+      expect(spies.updateNetwork).not.toHaveBeenCalled();
+    });
+
+    it('accepts a path matcher and applies the rule host-wide', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.addRequestTransformations!([
+        {
+          match: { host: 'api.openai.com', path: { startsWith: '/v1' } },
+          transform: { headers: { Authorization: 'Bearer sk-real' } },
+        },
+      ]);
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({
+        rules: {
+          'api.openai.com': [{ transform: { headers: { Authorization: 'Bearer sk-real' } } }],
+        },
+      });
+    });
+
+    it('does not commit state when the update fails', async () => {
+      const updateNetwork = vi
+        .fn(async () => {})
+        .mockRejectedValueOnce(new Error('network update failed'));
+      const { sandbox, spies } = makeMockSandbox({ updateNetwork });
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await expect(session.addRequestTransformations!([openaiAuth])).rejects.toThrow(
+        'network update failed',
+      );
+      // the failed addition is not silently included in the next update
+      await session.addRequestTransformations!([anthropicAuth]);
+      expect(updateNetwork).toHaveBeenLastCalledWith({
+        rules: {
+          'api.anthropic.com': [{ transform: { headers: { 'x-api-key': 'sk-ant-real' } } }],
+        },
+      });
+      expect(spies.getInfo).toHaveBeenCalled();
+    });
+
+    it('serializes concurrent network mutations in call order', async () => {
+      const applied: string[] = [];
+      let releaseFirst!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      const updateNetwork = vi.fn(async (update: { rules?: Record<string, unknown> }) => {
+        const hosts = Object.keys(update.rules ?? {}).join(',');
+        if (applied.length === 0) await gate; // stall the first update
+        applied.push(hosts);
+      });
+      const { sandbox } = makeMockSandbox({ updateNetwork });
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      const first = session.addRequestTransformations!([openaiAuth]);
+      const second = session.addRequestTransformations!([anthropicAuth]);
+      releaseFirst();
+      await Promise.all([first, second]);
+      // the second call ran after the first and included its committed state
+      expect(applied).toEqual([
+        'api.openai.com',
+        'api.openai.com,api.anthropic.com',
+      ]);
+    });
+
+    it('preserves creation-time allowInternetAccess:false on transformation-only updates', async () => {
+      const { sandbox, spies } = makeMockSandbox({
+        getInfo: vi.fn(async () => ({ allowInternetAccess: false, network: undefined })),
+      });
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.addRequestTransformations!([openaiAuth]);
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({
+        allowInternetAccess: false,
+        rules: {
+          'api.openai.com': [{ transform: { headers: { Authorization: 'Bearer sk-real' } } }],
+        },
+      });
+    });
+
+    it('restricted() exposes no network mutation surface', async () => {
+      const { sandbox } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      const restricted = session.restricted() as Record<string, unknown>;
+      expect(restricted.setRequestTransformations).toBeUndefined();
+      expect(restricted.addRequestTransformations).toBeUndefined();
+      expect(restricted.setNetworkPolicy).toBeUndefined();
+    });
+
+    it('merges with the network policy so neither clears the other', async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.setNetworkPolicy!({ mode: 'allow-all' });
+      await session.addRequestTransformations!([openaiAuth]);
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({
+        allowInternetAccess: true,
+        rules: {
+          'api.openai.com': [{ transform: { headers: { Authorization: 'Bearer sk-real' } } }],
+        },
+      });
+      // and the other order: a policy change keeps the managed rules
+      await session.setNetworkPolicy!({ mode: 'deny-all' });
+      expect(spies.updateNetwork).toHaveBeenLastCalledWith({
+        allowInternetAccess: false,
+        rules: {
+          'api.openai.com': [{ transform: { headers: { Authorization: 'Bearer sk-real' } } }],
+        },
+      });
     });
   });
 
