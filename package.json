@@ -2,6 +2,14 @@
   "name": "@e2b/ai-sdk-sandbox",
   "version": "0.1.0",
   "description": "E2B sandbox provider for the Vercel AI SDK",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/e2b-dev/ai-sdk-sandbox.git"
+  },
+  "homepage": "https://github.com/e2b-dev/ai-sdk-sandbox#readme",
+  "bugs": {
+    "url": "https://github.com/e2b-dev/ai-sdk-sandbox/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
