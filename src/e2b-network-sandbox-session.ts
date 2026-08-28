@@ -182,28 +182,8 @@ export class E2BNetworkSandboxSession
             ? {}
             : { allowInternetAccess: baseline.allowInternetAccess }),
         };
-    // E2B accepts at most one transform rule per host (the API rejects more
-    // with a 400), so all transformations for a host — baseline first, then
-    // session-managed in installation order — collapse into a single rule
-    // whose headers are merged with later entries overriding earlier ones.
-    // Host keys are lower-cased: E2B requires rule domains to be unique
-    // ignoring case, and DNS names are case-insensitive anyway.
-    const headersByHost: Record<string, Record<string, string>> = {};
-    for (const [host, hostRules] of Object.entries(baseline.network?.rules ?? {})) {
-      const merged = (headersByHost[host.toLowerCase()] ??= {});
-      for (const rule of hostRules) Object.assign(merged, rule.transform?.headers);
-    }
-    for (const transformation of candidate.transformations) {
-      Object.assign(
-        (headersByHost[transformation.match.host.toLowerCase()] ??= {}),
-        transformation.transform.headers,
-      );
-    }
-    const rules: Record<string, SandboxNetworkRule[]> = {};
-    for (const [host, headers] of Object.entries(headersByHost)) {
-      rules[host] = [{ transform: { headers } }];
-    }
-    if (Object.keys(rules).length > 0) update.rules = rules;
+    const rules = composeRules(baseline.network?.rules, candidate.transformations);
+    if (rules != null) update.rules = rules;
     await this.sandbox.updateNetwork(update);
     this.policyUpdate = candidate.policy;
     this.transformations = candidate.transformations;
@@ -238,12 +218,58 @@ export class E2BNetworkSandboxSession
 }
 
 /**
+ * Build E2B's `rules` payload from the creation-time baseline rules plus the
+ * session-managed transformations, in that order (later entries win).
+ *
+ * E2B accepts at most one transform rule per host and requires host keys to
+ * be unique ignoring case, so everything for a host collapses into a single
+ * rule keyed by the lower-cased host. HTTP header names are case-insensitive
+ * too, so `Authorization` and `authorization` are the same header — the last
+ * spelling and value win. Hosts that end up with no headers are omitted.
+ */
+function composeRules(
+  baseline: SandboxNetworkInfo['rules'] | undefined,
+  transformations: ReadonlyArray<HarnessV1RequestTransformation>,
+): Record<string, SandboxNetworkRule[]> | undefined {
+  // host → header name (lower-cased) → [name as given, value]
+  const byHost = new Map<string, Map<string, [string, string]>>();
+  const merge = (host: string, headers: Readonly<Record<string, string>> | undefined) => {
+    if (headers == null) return;
+    const key = host.toLowerCase();
+    const hostHeaders = byHost.get(key) ?? new Map<string, [string, string]>();
+    byHost.set(key, hostHeaders);
+    for (const [name, value] of Object.entries(headers)) {
+      hostHeaders.set(name.toLowerCase(), [name, value]);
+    }
+  };
+
+  for (const [host, hostRules] of Object.entries(baseline ?? {})) {
+    for (const rule of hostRules) merge(host, rule.transform?.headers);
+  }
+  for (const { match, transform } of transformations) {
+    merge(match.host, transform.headers);
+  }
+
+  const rules: Record<string, SandboxNetworkRule[]> = {};
+  for (const [host, hostHeaders] of byHost) {
+    if (hostHeaders.size === 0) continue;
+    rules[host] = [
+      { transform: { headers: Object.fromEntries(hostHeaders.values()) } },
+    ];
+  }
+  return Object.keys(rules).length === 0 ? undefined : rules;
+}
+
+/**
  * Validate and defensively copy harness request transformations for
  * session-managed state.
  *
- * E2B's egress proxy matches rules by host only. A `path` matcher (what
- * harness adapters generate for API base URLs) is accepted and applied
- * host-wide — the injected headers still only ever go to the matched host.
+ * E2B's egress proxy matches rules by host only. A `path` matcher is accepted
+ * and applied host-wide — the injected headers still only ever go to the
+ * matched host. Rejecting it is not an option: `@ai-sdk/harness`'s
+ * `createCredentialRequestTransformation` emits `path` whenever the API base
+ * URL has one (AI Gateway `/v1`, custom `ANTHROPIC_BASE_URL`), and a rejection
+ * would make adapters fall back to forwarding real secrets into the sandbox.
  * `method`, `queryString`, and `headers` matchers cannot be enforced and are
  * rejected rather than silently widened. Note that a rules entry does not
  * allow egress by itself: under an allow-list policy the host must also be
