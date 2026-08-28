@@ -93,7 +93,10 @@ use this automatically for their model API keys. E2B matches rules by host:
 a `path` matcher is applied host-wide, and `method`/`queryString`/`headers`
 matchers are rejected rather than silently widened. E2B allows one transform
 rule per host, so multiple transformations for the same host are merged into
-one rule (later headers override earlier ones). Network policies remain
+one rule (later headers override earlier ones); host keys are matched
+case-insensitively and exactly (a rule for `example.com` does not cover
+`www.example.com`). The egress proxy transforms HTTPS requests only, as the
+harness contract specifies. Network policies remain
 authoritative over which hosts can be reached. See
 `examples/request-transformations.ts` for a live end-to-end check.
 

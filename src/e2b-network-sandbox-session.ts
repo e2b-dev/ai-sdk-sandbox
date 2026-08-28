@@ -189,17 +189,19 @@ export class E2BNetworkSandboxSession
     // with a 400), so all transformations for a host — baseline first, then
     // session-managed in installation order — collapse into a single rule
     // whose headers are merged with later entries overriding earlier ones.
+    // Host keys are lower-cased: E2B requires rule domains to be unique
+    // ignoring case, and DNS names are case-insensitive anyway.
     const headersByHost: Record<string, Record<string, string>> = {};
     for (const [host, hostRules] of Object.entries(
       baseline.network?.rules ?? {}
     )) {
-      const merged = (headersByHost[host] ??= {});
+      const merged = (headersByHost[host.toLowerCase()] ??= {});
       for (const rule of hostRules)
         Object.assign(merged, rule.transform?.headers);
     }
     for (const transformation of candidate.transformations) {
       Object.assign(
-        (headersByHost[transformation.match.host] ??= {}),
+        (headersByHost[transformation.match.host.toLowerCase()] ??= {}),
         transformation.transform.headers
       );
     }

@@ -266,6 +266,29 @@ describe("createE2BSandbox (wrap existing)", () => {
       });
     });
 
+    it("lower-cases host keys so case variants merge into one rule", async () => {
+      const { sandbox, spies } = makeMockSandbox();
+      const session = await createE2BSandbox({ sandbox }).createSession();
+      await session.setRequestTransformations!([
+        openaiAuth,
+        {
+          match: { host: "API.OpenAI.com" },
+          transform: { headers: { "x-extra": "v" } },
+        },
+      ]);
+      expect(spies.updateNetwork).toHaveBeenCalledWith({
+        rules: {
+          "api.openai.com": [
+            {
+              transform: {
+                headers: { Authorization: "Bearer sk-real", "x-extra": "v" },
+              },
+            },
+          ],
+        },
+      });
+    });
+
     it("add appends to previously managed transformations", async () => {
       const { sandbox, spies } = makeMockSandbox();
       const session = await createE2BSandbox({ sandbox }).createSession();
