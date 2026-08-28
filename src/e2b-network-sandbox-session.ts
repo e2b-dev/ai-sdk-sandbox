@@ -195,7 +195,9 @@ export class E2BNetworkSandboxSession
   };
 
   stop = async (): Promise<void> => {
-    if (!this.ownsLifecycle || this.stopped || this.destroyed) return;
+    if (!this.ownsLifecycle || this.stopped || this.destroyed) {
+      return;
+    }
     // pause() keeps the filesystem + memory so resumeSession() can reattach.
     // Set the flag only after success so a transient failure stays retryable.
     await this.sandbox.pause();
@@ -204,7 +206,9 @@ export class E2BNetworkSandboxSession
 
   destroy = async (): Promise<void> => {
     // Idempotent, and still kills a sandbox that was previously stopped/paused.
-    if (!this.ownsLifecycle || this.destroyed) return;
+    if (!this.ownsLifecycle || this.destroyed) {
+      return;
+    }
     await this.sandbox.kill();
     this.destroyed = true;
   };
@@ -300,8 +304,12 @@ export function toE2BNetworkUpdate(
         denyOut.push(ALL_TRAFFIC);
       }
       const update: SandboxNetworkUpdate = {};
-      if (allowOut.length > 0) update.allowOut = allowOut;
-      if (denyOut.length > 0) update.denyOut = denyOut;
+      if (allowOut.length > 0) {
+        update.allowOut = allowOut;
+      }
+      if (denyOut.length > 0) {
+        update.denyOut = denyOut;
+      }
       if (update.allowOut == null && update.denyOut == null) {
         throw new HarnessCapabilityUnsupportedError({
           harnessId: E2B_PROVIDER_ID,
