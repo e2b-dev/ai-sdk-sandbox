@@ -4,7 +4,9 @@
  * killing the build that other callers are awaiting.
  */
 export function withAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (signal == null) return promise;
+  if (signal == null) {
+    return promise;
+  }
   if (signal.aborted) {
     return Promise.reject(
       signal.reason ?? new DOMException('Aborted', 'AbortError'),

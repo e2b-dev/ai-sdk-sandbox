@@ -178,7 +178,9 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
   }
 
   private get advertisedPorts(): ReadonlyArray<number> {
-    if (isWrapSettings(this.settings)) return this.settings.bridgePorts ?? [];
+    if (isWrapSettings(this.settings)) {
+      return this.settings.bridgePorts ?? [];
+    }
     return this.settings.ports ?? [];
   }
 
@@ -188,7 +190,9 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
    * sandbox was created on rather than falling back to environment defaults.
    */
   private connectionOptions() {
-    if (isWrapSettings(this.settings)) return {};
+    if (isWrapSettings(this.settings)) {
+      return {};
+    }
     const { apiKey, headers, apiHeaders, debug, domain, requestTimeoutMs } =
       this.settings;
     return { apiKey, headers, apiHeaders, debug, domain, requestTimeoutMs };
@@ -196,7 +200,9 @@ export class E2BSandboxProvider implements HarnessV1SandboxProvider {
 
   /** E2B create params from settings, stripped of provider-level keys. */
   private createParams(sessionId?: string, identity?: string): SandboxOpts {
-    if (isWrapSettings(this.settings)) return {};
+    if (isWrapSettings(this.settings)) {
+      return {};
+    }
     const {
       ports: _ports,
       setupCommands: _setupCommands,

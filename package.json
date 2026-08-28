@@ -40,7 +40,8 @@
     "release": "pnpm run build && changeset publish",
     "example:basic": "tsx --env-file-if-exists=.env examples/basic.ts",
     "example:harness": "tsx --env-file-if-exists=.env examples/harness.ts",
-    "example:resume": "tsx --env-file-if-exists=.env examples/resume.ts"
+    "example:resume": "tsx --env-file-if-exists=.env examples/resume.ts",
+    "example:transformations": "tsx --env-file-if-exists=.env examples/request-transformations.ts"
   },
   "keywords": [
     "ai-sdk",
@@ -57,6 +58,7 @@
   },
   "devDependencies": {
     "@ai-sdk/harness-claude-code": "^1.0.76",
+    "@ai-sdk/harness-codex": "^1.0.75",
     "@changesets/cli": "^2.27.0",
     "@types/node": "^25.9.3",
     "tsup": "^8.0.0",

@@ -65,7 +65,9 @@ export class E2BSandboxSession implements Experimental_SandboxSession {
       });
 
     // Kill the command on abort; closing the request alone leaves it running.
-    if (abortSignal?.aborted) void handle.kill().catch(() => {});
+    if (abortSignal?.aborted) {
+      void handle.kill().catch(() => {});
+    }
     const onAbort = () => void handle.kill().catch(() => {});
     abortSignal?.addEventListener('abort', onAbort, { once: true });
 
@@ -140,7 +142,9 @@ export class E2BSandboxSession implements Experimental_SandboxSession {
         ...(abortSignal ? { signal: abortSignal } : {}),
       });
     } catch (error) {
-      if (error instanceof FileNotFoundError) return null;
+      if (error instanceof FileNotFoundError) {
+        return null;
+      }
       throw error;
     }
   }
@@ -159,7 +163,9 @@ export class E2BSandboxSession implements Experimental_SandboxSession {
         ...(abortSignal ? { signal: abortSignal } : {}),
       });
     } catch (error) {
-      if (error instanceof FileNotFoundError) return null;
+      if (error instanceof FileNotFoundError) {
+        return null;
+      }
       throw error;
     }
   }
@@ -178,7 +184,9 @@ export class E2BSandboxSession implements Experimental_SandboxSession {
     abortSignal?: AbortSignal;
   }): Promise<string | null> {
     const bytes = await this.readBinaryFile({ path, abortSignal });
-    if (bytes == null) return null;
+    if (bytes == null) {
+      return null;
+    }
     const text = Buffer.from(bytes).toString(encoding as BufferEncoding);
     return extractLines({ text, startLine, endLine });
   }
@@ -277,7 +285,9 @@ async function createSandboxProcess(
 
   let closed = false;
   const closeStreams = () => {
-    if (closed) return;
+    if (closed) {
+      return;
+    }
     closed = true;
     try {
       stdoutController.close();
@@ -311,7 +321,9 @@ async function createSandboxProcess(
   const exit: Promise<{ exitCode: number }> = handle.wait().then(
     result => ({ exitCode: result.exitCode }),
     error => {
-      if (error instanceof CommandExitError) return { exitCode: error.exitCode };
+      if (error instanceof CommandExitError) {
+        return { exitCode: error.exitCode };
+      }
       throw error;
     },
   );
@@ -341,7 +353,9 @@ async function createSandboxProcess(
       try {
         result = await exit;
       } catch (error) {
-        if (!abortSignal?.aborted) throw error;
+        if (!abortSignal?.aborted) {
+          throw error;
+        }
       }
       if (abortSignal?.aborted) {
         throw abortSignal.reason ?? new DOMException('Aborted', 'AbortError');
