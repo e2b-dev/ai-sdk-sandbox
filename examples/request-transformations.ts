@@ -5,10 +5,11 @@
  *
  * Run: E2B_API_KEY=... npx tsx --env-file-if-exists=.env examples/request-transformations.ts
  */
+import { randomUUID } from "node:crypto";
 import { createE2BSandbox } from "@e2b/ai-sdk-sandbox";
 
 const HOST = "httpbin.org";
-const SECRET = "brokered-secret-" + Math.random().toString(36).slice(2);
+const SECRET = "brokered-secret-" + randomUUID();
 
 const session = await createE2BSandbox({ template: "base" }).createSession();
 let failed = false;
