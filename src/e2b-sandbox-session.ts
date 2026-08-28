@@ -65,7 +65,9 @@ export class E2BSandboxSession implements Experimental_SandboxSession {
       });
 
     // Kill the command on abort; closing the request alone leaves it running.
-    if (abortSignal?.aborted) void handle.kill().catch(() => {});
+    if (abortSignal?.aborted) {
+      void handle.kill().catch(() => {});
+    }
     const onAbort = () => void handle.kill().catch(() => {});
     abortSignal?.addEventListener('abort', onAbort, { once: true });
 
