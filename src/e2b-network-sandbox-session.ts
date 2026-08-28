@@ -99,9 +99,12 @@ export class E2BNetworkSandboxSession
   setRequestTransformations = async (
     transformations: ReadonlyArray<HarnessV1RequestTransformation>,
   ): Promise<void> => {
-    const next = validateAndCopyTransformations(transformations);
+    const replacementTransformations = validateAndCopyTransformations(transformations);
     await this.enqueueNetworkChange(() =>
-      this.pushNetwork({ policy: this.policyUpdate, transformations: next }),
+      this.pushNetwork({
+        policy: this.policyUpdate,
+        transformations: replacementTransformations,
+      }),
     );
   };
 
@@ -109,11 +112,11 @@ export class E2BNetworkSandboxSession
   addRequestTransformations = async (
     transformations: ReadonlyArray<HarnessV1RequestTransformation>,
   ): Promise<void> => {
-    const added = validateAndCopyTransformations(transformations);
+    const additionalTransformations = validateAndCopyTransformations(transformations);
     await this.enqueueNetworkChange(() =>
       this.pushNetwork({
         policy: this.policyUpdate,
-        transformations: [...this.transformations, ...added],
+        transformations: [...this.transformations, ...additionalTransformations],
       }),
     );
   };
