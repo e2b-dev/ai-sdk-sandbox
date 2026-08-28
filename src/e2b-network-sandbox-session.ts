@@ -4,18 +4,18 @@ import {
   type HarnessV1NetworkSandboxSession,
   type HarnessV1PortEndpoint,
   type HarnessV1RequestTransformation,
-} from "@ai-sdk/harness";
-import type { Experimental_SandboxSession as SandboxSession } from "@ai-sdk/provider-utils";
-import { ALL_TRAFFIC } from "e2b";
+} from '@ai-sdk/harness';
+import type { Experimental_SandboxSession as SandboxSession } from '@ai-sdk/provider-utils';
+import { ALL_TRAFFIC } from 'e2b';
 import type {
   Sandbox,
   SandboxNetworkInfo,
   SandboxNetworkRule,
   SandboxNetworkUpdate,
-} from "e2b";
-import { E2BSandboxSession } from "./e2b-sandbox-session";
+} from 'e2b';
+import { E2BSandboxSession } from './e2b-sandbox-session';
 
-const E2B_PROVIDER_ID = "e2b-sandbox";
+const E2B_PROVIDER_ID = 'e2b-sandbox';
 
 /**
  * `HarnessV1NetworkSandboxSession` backed by an E2B `Sandbox`. The provider's
@@ -64,7 +64,7 @@ export class E2BNetworkSandboxSession
 
   getPortEndpoint = async (options: {
     port: number;
-    protocol?: "http" | "https" | "ws";
+    protocol?: 'http' | 'https' | 'ws';
   }): Promise<HarnessV1PortEndpoint> => {
     // E2B port URLs are public and carry auth in the URL itself, so the
     // endpoint needs no extra headers.
@@ -74,23 +74,20 @@ export class E2BNetworkSandboxSession
   /** @deprecated Use `getPortEndpoint` instead. */
   getPortUrl = async (options: {
     port: number;
-    protocol?: "http" | "https" | "ws";
+    protocol?: 'http' | 'https' | 'ws';
   }): Promise<string> => {
     // E2B exposes any listening port via getHost(); no pre-declaration needed.
     const host = this.sandbox.getHost(options.port);
     // E2B terminates TLS, so http→https and ws→wss.
-    const protocol = options.protocol ?? "https";
-    const scheme = protocol === "ws" ? "wss" : "https";
+    const protocol = options.protocol ?? 'https';
+    const scheme = protocol === 'ws' ? 'wss' : 'https';
     return `${scheme}://${host}`;
   };
 
   setNetworkPolicy = async (policy: HarnessV1NetworkPolicy): Promise<void> => {
     const policyUpdate = toE2BNetworkUpdate(policy);
     await this.enqueueNetworkChange(() =>
-      this.pushNetwork({
-        policy: policyUpdate,
-        transformations: this.transformations,
-      })
+      this.pushNetwork({ policy: policyUpdate, transformations: this.transformations }),
     );
   };
 
@@ -100,24 +97,24 @@ export class E2BNetworkSandboxSession
    * leaves the sandbox — the values never enter the sandbox itself.
    */
   setRequestTransformations = async (
-    transformations: ReadonlyArray<HarnessV1RequestTransformation>
+    transformations: ReadonlyArray<HarnessV1RequestTransformation>,
   ): Promise<void> => {
     const next = validateAndCopyTransformations(transformations);
     await this.enqueueNetworkChange(() =>
-      this.pushNetwork({ policy: this.policyUpdate, transformations: next })
+      this.pushNetwork({ policy: this.policyUpdate, transformations: next }),
     );
   };
 
   /** Add transformation rules without replacing the ones already managed. */
   addRequestTransformations = async (
-    transformations: ReadonlyArray<HarnessV1RequestTransformation>
+    transformations: ReadonlyArray<HarnessV1RequestTransformation>,
   ): Promise<void> => {
     const added = validateAndCopyTransformations(transformations);
     await this.enqueueNetworkChange(() =>
       this.pushNetwork({
         policy: this.policyUpdate,
         transformations: [...this.transformations, ...added],
-      })
+      }),
     );
   };
 
@@ -141,7 +138,7 @@ export class E2BNetworkSandboxSession
     const run = this.networkQueue.then(task, task);
     this.networkQueue = run.then(
       () => undefined,
-      () => undefined
+      () => undefined,
     );
     return run;
   };
@@ -160,7 +157,7 @@ export class E2BNetworkSandboxSession
       (error) => {
         this.baselinePromise = null;
         throw error;
-      }
+      },
     );
     return this.baselinePromise;
   };
@@ -192,17 +189,14 @@ export class E2BNetworkSandboxSession
     // Host keys are lower-cased: E2B requires rule domains to be unique
     // ignoring case, and DNS names are case-insensitive anyway.
     const headersByHost: Record<string, Record<string, string>> = {};
-    for (const [host, hostRules] of Object.entries(
-      baseline.network?.rules ?? {}
-    )) {
+    for (const [host, hostRules] of Object.entries(baseline.network?.rules ?? {})) {
       const merged = (headersByHost[host.toLowerCase()] ??= {});
-      for (const rule of hostRules)
-        Object.assign(merged, rule.transform?.headers);
+      for (const rule of hostRules) Object.assign(merged, rule.transform?.headers);
     }
     for (const transformation of candidate.transformations) {
       Object.assign(
         (headersByHost[transformation.match.host.toLowerCase()] ??= {}),
-        transformation.transform.headers
+        transformation.transform.headers,
       );
     }
     const rules: Record<string, SandboxNetworkRule[]> = {};
@@ -221,7 +215,7 @@ export class E2BNetworkSandboxSession
   // for parity with the spec signature and the rest of this class.
   setPorts = async (
     ports: ReadonlyArray<number>,
-    options?: { abortSignal?: AbortSignal }
+    options?: { abortSignal?: AbortSignal },
   ): Promise<void> => {
     options?.abortSignal?.throwIfAborted();
     this.exposedPorts = [...ports];
@@ -256,7 +250,7 @@ export class E2BNetworkSandboxSession
  * reachable.
  */
 export function validateAndCopyTransformations(
-  transformations: ReadonlyArray<HarnessV1RequestTransformation>
+  transformations: ReadonlyArray<HarnessV1RequestTransformation>,
 ): HarnessV1RequestTransformation[] {
   return transformations.map((transformation) => {
     const { host, path, method, queryString, headers } = transformation.match;
@@ -264,7 +258,7 @@ export function validateAndCopyTransformations(
       throw new HarnessCapabilityUnsupportedError({
         harnessId: E2B_PROVIDER_ID,
         message:
-          "E2B egress rules match requests by host (a path matcher is applied host-wide); method, queryString, and headers matchers are not supported.",
+          'E2B egress rules match requests by host (a path matcher is applied host-wide); method, queryString, and headers matchers are not supported.',
       });
     }
     return {
@@ -276,14 +270,14 @@ export function validateAndCopyTransformations(
 
 /** Map the harness network policy onto an E2B network update. */
 export function toE2BNetworkUpdate(
-  policy: HarnessV1NetworkPolicy
+  policy: HarnessV1NetworkPolicy,
 ): SandboxNetworkUpdate {
   switch (policy.mode) {
-    case "allow-all":
+    case 'allow-all':
       return { allowInternetAccess: true };
-    case "deny-all":
+    case 'deny-all':
       return { allowInternetAccess: false };
-    case "custom": {
+    case 'custom': {
       const allowOut = [
         ...(policy.allowedHosts ?? []),
         ...(policy.allowedCIDRs ?? []),
@@ -302,7 +296,7 @@ export function toE2BNetworkUpdate(
         throw new HarnessCapabilityUnsupportedError({
           harnessId: E2B_PROVIDER_ID,
           message:
-            "Custom network policy requires at least one of allowedHosts, allowedCIDRs, or deniedCIDRs to be non-empty.",
+            'Custom network policy requires at least one of allowedHosts, allowedCIDRs, or deniedCIDRs to be non-empty.',
         });
       }
       return update;
