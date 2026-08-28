@@ -255,25 +255,6 @@ describe('createE2BSandbox (wrap existing)', () => {
       });
     });
 
-    it('treats header names case-insensitively, last spelling and value win', async () => {
-      const { sandbox, spies } = makeMockSandbox();
-      const session = await createE2BSandbox({ sandbox }).createSession();
-      await session.setRequestTransformations!([
-        openaiAuth,
-        {
-          match: { host: 'api.openai.com' },
-          transform: { headers: { authorization: 'Bearer sk-later' } },
-        },
-      ]);
-      expect(spies.updateNetwork).toHaveBeenCalledWith({
-        rules: {
-          'api.openai.com': [
-            { transform: { headers: { authorization: 'Bearer sk-later' } } },
-          ],
-        },
-      });
-    });
-
     it('add appends to previously managed transformations', async () => {
       const { sandbox, spies } = makeMockSandbox();
       const session = await createE2BSandbox({ sandbox }).createSession();

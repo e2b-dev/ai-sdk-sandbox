@@ -10,7 +10,7 @@ import { ALL_TRAFFIC } from 'e2b';
 import type {
   Sandbox,
   SandboxNetworkInfo,
-  SandboxNetworkRule,
+  SandboxNetworkRules,
   SandboxNetworkUpdate,
 } from 'e2b';
 import { E2BSandboxSession } from './e2b-sandbox-session';
@@ -167,24 +167,17 @@ export class E2BNetworkSandboxSession
     transformations: HarnessV1RequestTransformation[];
   }): Promise<void> => {
     const baseline = await this.getBaseline();
-    // A policy set through this session is a complete egress statement and
-    // replaces the baseline allow/deny lists; baseline rules always persist.
-    const update: SandboxNetworkUpdate = candidate.policy
-      ? { ...candidate.policy }
-      : {
-          ...(baseline.network?.allowOut
-            ? { allowOut: [...baseline.network.allowOut] }
-            : {}),
-          ...(baseline.network?.denyOut
-            ? { denyOut: [...baseline.network.denyOut] }
-            : {}),
-          ...(baseline.allowInternetAccess == null
-            ? {}
-            : { allowInternetAccess: baseline.allowInternetAccess }),
-        };
-    const rules = composeRules(baseline.network?.rules, candidate.transformations);
-    if (rules != null) update.rules = rules;
-    await this.sandbox.updateNetwork(update);
+    // A policy set through this session replaces the baseline allow/deny
+    // lists; baseline rules always persist underneath the managed ones.
+    const access: SandboxNetworkUpdate = candidate.policy ?? {
+      allowOut: baseline.network?.allowOut,
+      denyOut: baseline.network?.denyOut,
+      allowInternetAccess: baseline.allowInternetAccess,
+    };
+    await this.sandbox.updateNetwork({
+      ...access,
+      rules: toE2BRules(baseline.network?.rules, candidate.transformations),
+    });
     this.policyUpdate = candidate.policy;
     this.transformations = candidate.transformations;
   };
@@ -218,46 +211,37 @@ export class E2BNetworkSandboxSession
 }
 
 /**
- * Build E2B's `rules` payload from the creation-time baseline rules plus the
- * session-managed transformations, in that order (later entries win).
- *
- * E2B accepts at most one transform rule per host and requires host keys to
- * be unique ignoring case, so everything for a host collapses into a single
- * rule keyed by the lower-cased host. HTTP header names are case-insensitive
- * too, so `Authorization` and `authorization` are the same header — the last
- * spelling and value win. Hosts that end up with no headers are omitted.
+ * E2B allows one transform rule per host, carrying up to 20 headers. So the
+ * rules payload is simply "headers grouped by host": the sandbox's existing
+ * rules first, then every managed transformation merged in on top (later
+ * headers win). Host keys are lower-cased because E2B requires them to be
+ * unique ignoring case.
  */
-function composeRules(
-  baseline: SandboxNetworkInfo['rules'] | undefined,
+export function toE2BRules(
+  existing: SandboxNetworkInfo['rules'] | undefined,
   transformations: ReadonlyArray<HarnessV1RequestTransformation>,
-): Record<string, SandboxNetworkRule[]> | undefined {
-  // host → header name (lower-cased) → [name as given, value]
-  const byHost = new Map<string, Map<string, [string, string]>>();
-  const merge = (host: string, headers: Readonly<Record<string, string>> | undefined) => {
-    if (headers == null) return;
-    const key = host.toLowerCase();
-    const hostHeaders = byHost.get(key) ?? new Map<string, [string, string]>();
-    byHost.set(key, hostHeaders);
-    for (const [name, value] of Object.entries(headers)) {
-      hostHeaders.set(name.toLowerCase(), [name, value]);
-    }
-  };
-
-  for (const [host, hostRules] of Object.entries(baseline ?? {})) {
-    for (const rule of hostRules) merge(host, rule.transform?.headers);
+): SandboxNetworkRules | undefined {
+  const headersByHost: Record<string, Record<string, string>> = {};
+  for (const [host, rules] of Object.entries(existing ?? {})) {
+    headersByHost[host.toLowerCase()] = Object.assign(
+      {},
+      ...rules.map((rule) => rule.transform?.headers),
+    );
   }
   for (const { match, transform } of transformations) {
-    merge(match.host, transform.headers);
+    const host = match.host.toLowerCase();
+    headersByHost[host] = { ...headersByHost[host], ...transform.headers };
   }
-
-  const rules: Record<string, SandboxNetworkRule[]> = {};
-  for (const [host, hostHeaders] of byHost) {
-    if (hostHeaders.size === 0) continue;
-    rules[host] = [
-      { transform: { headers: Object.fromEntries(hostHeaders.values()) } },
-    ];
+  const hosts = Object.keys(headersByHost);
+  if (hosts.length === 0) {
+    return undefined;
   }
-  return Object.keys(rules).length === 0 ? undefined : rules;
+  return Object.fromEntries(
+    hosts.map((host) => [
+      host,
+      [{ transform: { headers: headersByHost[host] } }],
+    ]),
+  );
 }
 
 /**
